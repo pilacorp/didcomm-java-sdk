@@ -66,6 +66,7 @@ public class Processor {
         return result;
     }
 
+    @SuppressWarnings("unchecked")
     private static Object convertToJSONLDCompatible(Object value) {
         if (value == null) {
             return null;

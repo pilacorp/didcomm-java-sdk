@@ -238,4 +238,3 @@ public class JWTCredential implements Credential {
         this.verificationMethodKey = verificationMethodKey;
     }
 }
-

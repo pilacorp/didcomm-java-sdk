@@ -2,6 +2,8 @@ package com.pila.credential.vc;
 
 import com.pila.credential.common.dto.Proof;
 import com.pila.credential.common.jsonmap.JSONMap;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.Map;
 
@@ -45,13 +47,11 @@ public class JSONCredential implements Credential {
         }
 
         CredentialData m = new CredentialData();
-        try {
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            Map<String, Object> map = mapper.readValue(rawJSON, Map.class);
-            m.putAll(map);
-        } catch (Exception e) {
-            throw new Exception("failed to unmarshal credential: " + e.getMessage(), e);
-        }
+
+        ObjectMapper mapper = new ObjectMapper();
+        Map<String, Object> map = mapper.readValue(rawJSON, new TypeReference<Map<String, Object>>() {
+        });
+        m.putAll(map);
 
         JSONCredential jsonCred = new JSONCredential();
         jsonCred.credentialData = m;

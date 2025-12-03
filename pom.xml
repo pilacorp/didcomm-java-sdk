@@ -83,7 +83,7 @@
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>3.1.0</version>
                 <configuration>
-                    <mainClass>com.pila.didcomm.Main</mainClass>
+                    <mainClass>com.pila.Main</mainClass>
                 </configuration>
             </plugin>
         </plugins>

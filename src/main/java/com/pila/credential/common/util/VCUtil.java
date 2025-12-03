@@ -1,5 +1,6 @@
 package com.pila.credential.common.util;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pila.credential.common.dto.Proof;
 import com.pila.credential.common.jsonmap.JSONMap;
@@ -173,6 +174,8 @@ public class VCUtil {
             b = objectMapper.writeValueAsBytes(v);
         }
 
-        return objectMapper.readValue(b, Map.class);
+        return objectMapper.readValue(b,
+                new TypeReference<Map<String, Object>>() {
+                });
     }
 }

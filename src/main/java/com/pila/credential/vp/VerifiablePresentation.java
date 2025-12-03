@@ -24,35 +24,36 @@ public class VerifiablePresentation {
     // - verifiableCredential: List<Credential> or List<String> (for references)
     // - proof: Proof object
     // - id: String (optional)
-    
+
     /**
      * TODO: Parse VerifiablePresentation from JSON bytes
      */
     public static VerifiablePresentation parsePresentation(byte[] rawJSON) throws Exception {
         throw new UnsupportedOperationException("VerifiablePresentation parsing is not yet implemented");
     }
-    
+
     /**
      * TODO: Add proof to the presentation
      */
     public void addProof(String privKeyHex) throws Exception {
         throw new UnsupportedOperationException("Adding proof to VerifiablePresentation is not yet implemented");
     }
-    
+
     /**
      * TODO: Verify the presentation proof and all contained credentials
      */
     public void verify() throws Exception {
         throw new UnsupportedOperationException("VerifiablePresentation verification is not yet implemented");
     }
-    
+
     /**
      * TODO: Get list of credentials in this presentation
      */
     public List<Credential> getCredentials() throws Exception {
-        throw new UnsupportedOperationException("Getting credentials from VerifiablePresentation is not yet implemented");
+        throw new UnsupportedOperationException(
+                "Getting credentials from VerifiablePresentation is not yet implemented");
     }
-    
+
     /**
      * TODO: Serialize presentation to JSON bytes
      */
@@ -60,4 +61,3 @@ public class VerifiablePresentation {
         throw new UnsupportedOperationException("VerifiablePresentation serialization is not yet implemented");
     }
 }
-

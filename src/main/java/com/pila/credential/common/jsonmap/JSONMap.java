@@ -1,5 +1,6 @@
 package com.pila.credential.common.jsonmap;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pila.credential.common.crypto.Crypto;
 import com.pila.credential.common.dto.Proof;
@@ -9,8 +10,6 @@ import com.pila.credential.common.verificationmethod.VerificationMethodResolver;
 
 import java.time.Instant;
 import java.util.*;
-
-import org.bouncycastle.util.encoders.Hex;
 
 /**
  * JSONMap represents a JSON object as a map.
@@ -43,10 +42,6 @@ public class JSONMap extends HashMap<String, Object> {
      * @throws Exception if serialization fails
      */
     public byte[] toJSON() throws Exception {
-        if (this == null) {
-            throw new IllegalStateException("JSONMap is null");
-        }
-
         try {
             byte[] data = objectMapper.writeValueAsBytes(this);
 
@@ -71,7 +66,10 @@ public class JSONMap extends HashMap<String, Object> {
     public Map<String, Object> toMap() throws Exception {
         try {
             byte[] bytes = objectMapper.writeValueAsBytes(this);
-            Map<String, Object> data = objectMapper.readValue(bytes, Map.class);
+
+            Map<String, Object> data = objectMapper.readValue(bytes,
+                    new TypeReference<Map<String, Object>>() {
+                    });
             return data;
         } catch (Exception e) {
             throw new Exception("failed to marshal JSONMap: " + e.getMessage(), e);
@@ -95,7 +93,8 @@ public class JSONMap extends HashMap<String, Object> {
 
         try {
             byte[] encoded = objectMapper.writeValueAsBytes(mCopy);
-            Map<String, Object> doc = objectMapper.readValue(encoded, Map.class);
+            Map<String, Object> doc = objectMapper.readValue(encoded, new TypeReference<Map<String, Object>>() {
+            });
 
             byte[] canonicalDoc = Processor.canonicalizeDocument(doc);
             return Processor.computeDigest(canonicalDoc);
@@ -111,9 +110,6 @@ public class JSONMap extends HashMap<String, Object> {
             String verificationMethod,
             String proofPurpose,
             String didBaseURL) throws Exception {
-        if (this == null) {
-            throw new IllegalStateException("JSONMap is null");
-        }
         if (verificationMethod == null || verificationMethod.isEmpty()) {
             throw new IllegalArgumentException("verification method is required");
         }
@@ -147,9 +143,6 @@ public class JSONMap extends HashMap<String, Object> {
      * Adds a custom proof to the JSONMap.
      */
     public void addCustomProof(Proof proof) throws Exception {
-        if (this == null) {
-            throw new IllegalStateException("JSONMap is null");
-        }
         if (proof == null) {
             throw new IllegalArgumentException("proof is null");
         }

@@ -1,5 +1,6 @@
 package com.pila.credential.vc;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.Map;
@@ -25,7 +26,10 @@ public class CredentialParser {
             objectMapper.readTree(rawCredential);
 
             // Try to parse as a map
-            Map<String, Object> jsonMap = objectMapper.readValue(rawCredential, Map.class);
+            Map<String, Object> jsonMap = objectMapper.readValue(rawCredential,
+                    new TypeReference<Map<String, Object>>() {
+                    });
+
             return jsonMap != null;
         } catch (Exception e) {
             return false;

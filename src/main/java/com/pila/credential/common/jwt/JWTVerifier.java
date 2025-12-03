@@ -38,7 +38,7 @@ public class JWTVerifier {
         // Decode header to get kid
         byte[] headerBytes = Base64.getUrlDecoder().decode(parts[0]);
         String headerJson = new String(headerBytes, StandardCharsets.UTF_8);
-        
+
         com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
         @SuppressWarnings("unchecked")
         java.util.Map<String, Object> header = mapper.readValue(headerJson, java.util.Map.class);
@@ -85,4 +85,3 @@ public class JWTVerifier {
         }
     }
 }
-

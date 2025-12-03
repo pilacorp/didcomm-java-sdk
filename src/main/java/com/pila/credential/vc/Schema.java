@@ -16,7 +16,7 @@ import lombok.Data;
 public class Schema {
     private String id;
     private String type;
-    
+
     // TODO: Add schema validation methods:
     // - validateCredential(Credential credential): boolean
     // - loadSchema(String schemaUrl): Schema
