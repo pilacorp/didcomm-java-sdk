@@ -39,8 +39,10 @@ public class Processor {
         // 1) Create RDFC canonicalizer
         var canon = RdfCanon.create("SHA-256", new RdfCanonTimeTicker(5 * 1000));
 
-        // 2) Provide RDF from JSON-LD to canonicalizer
-        JsonLd.toRdf(document).provide(canon);
+        // 2) Provide RDF from JSON-LD to canonicalizer using local context loader
+        JsonLd.toRdf(document)
+                .loader(new LocalContextDocumentLoader())
+                .provide(canon);
 
         // 3) Write canonical N-Quads to writer
         StringWriter writer = new StringWriter();
