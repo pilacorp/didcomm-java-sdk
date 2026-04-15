@@ -19,7 +19,7 @@ public final class JweBuilder {
         return URL_ENCODER.encodeToString(input);
     }
 
-    public static String build(byte[] sharedKey, byte[] iv, byte[] ciphertext) {
+    public static String build(byte[] iv, byte[] ciphertext, byte[] tag) {
         try {
             Map<String, Object> header = new LinkedHashMap<>();
             header.put("alg", "ECDH-ES");
@@ -32,8 +32,6 @@ public final class JweBuilder {
             jwe.put("protected", base64url(headerBytes));
             jwe.put("iv", base64url(iv));
             jwe.put("ciphertext", base64url(ciphertext));
-            byte[] tag = new byte[16];
-            System.arraycopy(sharedKey, 0, tag, 0, Math.min(16, sharedKey.length));
             jwe.put("tag", base64url(tag));
 
             return MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(jwe);
