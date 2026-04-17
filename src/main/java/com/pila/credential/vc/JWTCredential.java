@@ -5,8 +5,10 @@ import com.pila.credential.common.dto.Proof;
 import com.pila.credential.common.jsonmap.JSONMap;
 import com.pila.credential.common.jwt.JWTSigner;
 import com.pila.credential.common.jwt.JWTVerifier;
+import com.pila.credential.common.verificationmethod.VerificationMethodResolverProvider;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
@@ -16,7 +18,8 @@ import java.util.Map;
  */
 public class JWTCredential implements Credential {
     private String signingInput; // JWT header.payload (base64 encoded)
-    private CredentialData payloadData; // Parsed payload as CredentialData
+    private CredentialData payloadData; // Parsed vc claim content
+    private Map<String, Object> fullPayload; // Full JWT payload (iss, sub, aud, exp, vc, …)
     private String signature; // JWT signature (if signed)
     private String verificationMethodKey; // Verification method key
 
@@ -85,6 +88,7 @@ public class JWTCredential implements Credential {
         JWTCredential jwtCred = new JWTCredential();
         jwtCred.signingInput = signingInput;
         jwtCred.payloadData = payloadData;
+        jwtCred.fullPayload = payload;
         jwtCred.signature = "";
         jwtCred.verificationMethodKey = verificationMethodKey;
 
@@ -148,6 +152,7 @@ public class JWTCredential implements Credential {
         JWTCredential jwtCred = new JWTCredential();
         jwtCred.signingInput = signingInput;
         jwtCred.payloadData = new CredentialData(vcMap);
+        jwtCred.fullPayload = payloadMap;
         jwtCred.signature = signature;
 
         return jwtCred;
@@ -185,15 +190,60 @@ public class JWTCredential implements Credential {
     }
 
     @Override
-    public void verify() throws Exception {
+    public void verify(CredentialVerifyOptions options) throws Exception {
+        CredentialVerifyOptions verifyOptions = options == null ? CredentialVerifyOptions.defaults() : options;
         if (signature == null || signature.isEmpty()) {
             throw new Exception("credential has no signature");
         }
 
-        String didBaseURL = CredentialConfig.getBaseURL();
-        JWTVerifier verifier = new JWTVerifier(didBaseURL);
+        VerificationMethodResolverProvider resolverProvider = verifyOptions.getVerificationMethodResolverProvider();
+        if (resolverProvider == null) {
+            resolverProvider = CredentialConfig.getVerificationMethodResolverProvider();
+        }
+
+        JWTVerifier verifier = resolverProvider != null
+                ? new JWTVerifier(resolverProvider)
+                : new JWTVerifier(CredentialConfig.getBaseURL());
         String serialized = (String) serialize();
         verifier.verifyJWT(serialized);
+
+        if (verifyOptions.isCheckExpiration()) {
+            if (fullPayload == null) {
+                throw new Exception("JWT payload not available");
+            }
+
+            Object expObj = fullPayload.get("exp");
+            if (expObj == null) {
+                throw new Exception("VC JWT missing exp");
+            }
+
+            long exp;
+            if (expObj instanceof Number number) {
+                exp = number.longValue();
+            } else {
+                exp = Long.parseLong(String.valueOf(expObj));
+            }
+
+            if (exp <= Instant.now().getEpochSecond()) {
+                throw new Exception("VC JWT is expired");
+            }
+        }
+
+        if (verifyOptions.isCheckStatus()) {
+            CredentialStatusProvider statusProvider = verifyOptions.getCredentialStatusProvider();
+            if (statusProvider == null) {
+                statusProvider = CredentialConfig.getCredentialStatusProvider();
+            }
+
+            if (statusProvider == null) {
+                throw new Exception("credential status provider is not configured");
+            }
+
+            String statusList = statusProvider.resolveStatusList(payloadData);
+            if (statusList == null || statusList.isBlank()) {
+                throw new Exception("credential status provider returned no status list");
+            }
+        }
     }
 
     @Override
@@ -218,10 +268,19 @@ public class JWTCredential implements Credential {
     }
 
     /**
-     * Gets the credential data.
+     * Gets the vc claim content (credentialSubject, type, etc.).
      */
     public CredentialData getPayloadData() {
         return payloadData;
+    }
+
+    /**
+     * Gets the full JWT payload map including outer claims (iss, sub, aud, exp, vc, …).
+     * Only populated when the credential was created via {@link #parseJWTCredential} or
+     * {@link #newJWTCredential}; returns null for credentials constructed in other ways.
+     */
+    public Map<String, Object> getFullPayload() {
+        return fullPayload;
     }
 
     /**

@@ -2,6 +2,8 @@ package com.pila.credential.common.jwt;
 
 import com.pila.credential.common.crypto.Crypto;
 import com.pila.credential.common.verificationmethod.VerificationMethodResolver;
+import com.pila.credential.common.verificationmethod.VerificationMethodResolverProvider;
+import com.pila.credential.vc.CredentialConfig;
 import org.bouncycastle.util.encoders.Hex;
 
 import java.nio.charset.StandardCharsets;
@@ -12,20 +14,42 @@ import java.util.Base64;
  * JWT verifier for ES256K algorithm.
  */
 public class JWTVerifier {
-    private VerificationMethodResolver resolver;
+
+    private static final com.fasterxml.jackson.databind.ObjectMapper MAPPER =
+            new com.fasterxml.jackson.databind.ObjectMapper();
+
+    private final VerificationMethodResolverProvider resolver;
 
     /**
      * Creates a new JWT verifier with DID resolver.
-     * 
+     *
      * @param didBaseURL The base URL for DID resolution
      */
     public JWTVerifier(String didBaseURL) {
-        this.resolver = new VerificationMethodResolver(didBaseURL);
+        VerificationMethodResolverProvider configuredResolver =
+                CredentialConfig.getVerificationMethodResolverProvider();
+        if (configuredResolver != null) {
+            this.resolver = configuredResolver;
+        } else {
+            this.resolver = new VerificationMethodResolver(didBaseURL);
+        }
+    }
+
+    /**
+     * Creates a new JWT verifier with a custom verification method resolver.
+     *
+     * @param resolver custom resolver implementation
+     */
+    public JWTVerifier(VerificationMethodResolverProvider resolver) {
+        if (resolver == null) {
+            throw new IllegalArgumentException("resolver cannot be null");
+        }
+        this.resolver = resolver;
     }
 
     /**
      * Verifies a JWT token.
-     * 
+     *
      * @param tokenString The JWT token string
      * @throws Exception if verification fails
      */
@@ -39,9 +63,8 @@ public class JWTVerifier {
         byte[] headerBytes = Base64.getUrlDecoder().decode(parts[0]);
         String headerJson = new String(headerBytes, StandardCharsets.UTF_8);
 
-        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
         @SuppressWarnings("unchecked")
-        java.util.Map<String, Object> header = mapper.readValue(headerJson, java.util.Map.class);
+        java.util.Map<String, Object> header = MAPPER.readValue(headerJson, java.util.Map.class);
 
         // Check algorithm
         Object algObj = header.get("alg");
@@ -66,22 +89,20 @@ public class JWTVerifier {
         String signingString = parts[0] + "." + parts[1];
         byte[] signatureBytes = Base64.getUrlDecoder().decode(parts[2]);
 
-        // Verify signature
-        if (signatureBytes.length != 64) {
-            throw new Exception("invalid signature length");
-        }
-
         // Hash the signing string with SHA-256
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         byte[] messageHash = digest.digest(signingString.getBytes(StandardCharsets.UTF_8));
 
-        // Convert signature to hex format (R||S)
+        // Verify using Crypto utility; it accepts DER or raw R||S signatures.
         String signatureHex = Hex.toHexString(signatureBytes);
-
-        // Verify using Crypto utility
-        boolean isValid = Crypto.ecdsaVerifySignature(publicKeyHex, signatureHex, messageHash);
+        boolean isValid;
+        try {
+            isValid = Crypto.ecdsaVerifySignature(publicKeyHex, signatureHex, messageHash);
+        } catch (RuntimeException e) {
+            throw new Exception("VC JWT signature verification failed: " + e.getMessage(), e);
+        }
         if (!isValid) {
-            throw new Exception("signature verification failed");
+            throw new Exception("VC JWT signature verification failed");
         }
     }
 }

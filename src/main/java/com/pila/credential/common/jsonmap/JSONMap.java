@@ -7,6 +7,8 @@ import com.pila.credential.common.dto.Proof;
 import com.pila.credential.common.processor.Processor;
 import com.pila.credential.common.util.VCUtil;
 import com.pila.credential.common.verificationmethod.VerificationMethodResolver;
+import com.pila.credential.common.verificationmethod.VerificationMethodResolverProvider;
+import com.pila.credential.vc.CredentialConfig;
 
 import java.time.Instant;
 import java.util.*;
@@ -117,7 +119,7 @@ public class JSONMap extends HashMap<String, Object> {
             throw new IllegalArgumentException("proof purpose is required");
         }
 
-        VerificationMethodResolver resolver = new VerificationMethodResolver(didBaseURL);
+        VerificationMethodResolverProvider resolver = resolveVerificationMethodResolver(didBaseURL, null);
         boolean isValid = resolver.checkVerificationMethod(privKeyHex, verificationMethod);
         if (!isValid) {
             throw new Exception("private key and verification method do not match");
@@ -192,6 +194,10 @@ public class JSONMap extends HashMap<String, Object> {
      * Verifies an ECDSA-signed JSONMap.
      */
     public boolean verifyProof(String didBaseURL) throws Exception {
+        return verifyProof(didBaseURL, null);
+    }
+
+    public boolean verifyProof(String didBaseURL, VerificationMethodResolverProvider explicitResolver) throws Exception {
         Object proofObj = this.get("proof");
         if (proofObj == null) {
             throw new Exception("JSONMap has no proof");
@@ -220,7 +226,7 @@ public class JSONMap extends HashMap<String, Object> {
             }
 
             String issuerDID = (String) issuerObj;
-            VerificationMethodResolver resolver = new VerificationMethodResolver(didBaseURL);
+            VerificationMethodResolverProvider resolver = resolveVerificationMethodResolver(didBaseURL, explicitResolver);
             String publicKey = resolver.getDefaultPublicKey(issuerDID);
 
             Map<String, Object> reqMap = new HashMap<>(this);
@@ -234,7 +240,7 @@ public class JSONMap extends HashMap<String, Object> {
         } else if (DATA_INTEGRITY_PROOF.equals(proof.getType())
                 && ECDSA_RDFC_2019.equals(proof.getCryptosuite())) {
 
-            VerificationMethodResolver resolver = new VerificationMethodResolver(didBaseURL);
+            VerificationMethodResolverProvider resolver = resolveVerificationMethodResolver(didBaseURL, explicitResolver);
             String publicKey = resolver.getPublicKey(proof.getVerificationMethod());
             return verifyECDSA(publicKey, proof);
 
@@ -291,6 +297,19 @@ public class JSONMap extends HashMap<String, Object> {
         byte[] pubBytes = Crypto.keyToBytes(publicKeyHex);
 
         return Crypto.verifyJSONSignature(pubBytes, message, signatureBytes);
+    }
+
+    private VerificationMethodResolverProvider resolveVerificationMethodResolver(String didBaseURL,
+            VerificationMethodResolverProvider explicitResolver) {
+        if (explicitResolver != null) {
+            return explicitResolver;
+        }
+
+        VerificationMethodResolverProvider resolver = CredentialConfig.getVerificationMethodResolverProvider();
+        if (resolver != null) {
+            return resolver;
+        }
+        return new VerificationMethodResolver(didBaseURL);
     }
 
     // Helper methods

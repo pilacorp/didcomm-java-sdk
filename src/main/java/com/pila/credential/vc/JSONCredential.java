@@ -4,6 +4,7 @@ import com.pila.credential.common.dto.Proof;
 import com.pila.credential.common.jsonmap.JSONMap;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pila.credential.common.verificationmethod.VerificationMethodResolverProvider;
 
 import java.util.Map;
 
@@ -89,17 +90,50 @@ public class JSONCredential implements Credential {
     }
 
     @Override
-    public void verify() throws Exception {
+    public void verify(CredentialVerifyOptions options) throws Exception {
+        CredentialVerifyOptions verifyOptions = options == null ? CredentialVerifyOptions.defaults() : options;
+
         // Check if credential has proof
         if (credentialData.get("proof") == null) {
             throw new Exception("credential has no proof");
         }
 
+        VerificationMethodResolverProvider resolverProvider = verifyOptions.getVerificationMethodResolverProvider();
+        if (resolverProvider == null) {
+            resolverProvider = CredentialConfig.getVerificationMethodResolverProvider();
+        }
+
         String didBaseURL = CredentialConfig.getBaseURL();
-        boolean isValid = ((JSONMap) credentialData).verifyProof(didBaseURL);
+        boolean isValid = ((JSONMap) credentialData).verifyProof(didBaseURL, resolverProvider);
 
         if (!isValid) {
             throw new Exception("invalid proof");
+        }
+
+        if (verifyOptions.isCheckExpiration()) {
+            Object validUntilObj = credentialData.get("validUntil");
+            if (validUntilObj instanceof String) {
+                java.time.Instant validUntil = java.time.Instant.parse((String) validUntilObj);
+                if (!validUntil.isAfter(java.time.Instant.now())) {
+                    throw new Exception("credential is expired");
+                }
+            }
+        }
+
+        if (verifyOptions.isCheckStatus()) {
+            CredentialStatusProvider statusProvider = verifyOptions.getCredentialStatusProvider();
+            if (statusProvider == null) {
+                statusProvider = CredentialConfig.getCredentialStatusProvider();
+            }
+
+            if (statusProvider == null) {
+                throw new Exception("credential status provider is not configured");
+            }
+
+            String statusList = statusProvider.resolveStatusList(credentialData);
+            if (statusList == null || statusList.isBlank()) {
+                throw new Exception("credential status provider returned no status list");
+            }
         }
     }
 

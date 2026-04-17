@@ -97,10 +97,10 @@ public class Crypto {
             verifier.update(message);
             return verifier.verify(signature);
 
+        } catch (IllegalArgumentException e) {
+            throw e;
         } catch (Exception e) {
-            System.out.println(e.getMessage());
-            e.printStackTrace();
-            return false;
+            throw new RuntimeException("ECDSA signature verification error: " + e.getMessage(), e);
         }
     }
 

@@ -35,7 +35,17 @@ public interface Credential {
      * 
      * @throws Exception if verification fails
      */
-    void verify() throws Exception;
+    default void verify() throws Exception {
+        verify(CredentialVerifyOptions.defaults());
+    }
+
+    /**
+     * Verifies the credential proof using the supplied options.
+     *
+     * @param options verification options
+     * @throws Exception if verification fails
+     */
+    void verify(CredentialVerifyOptions options) throws Exception;
 
     /**
      * Serializes the credential to its native format.

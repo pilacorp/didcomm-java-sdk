@@ -17,7 +17,7 @@ import java.util.Scanner;
 /**
  * Resolver for DID verification methods.
  */
-public class VerificationMethodResolver {
+public class VerificationMethodResolver implements VerificationMethodResolverProvider {
     private String baseURL;
     private static final ObjectMapper objectMapper = new ObjectMapper();
     private static final int HTTP_TIMEOUT_MS = 10000;
