@@ -5,6 +5,8 @@ import com.pila.credential.common.dto.Proof;
 import com.pila.credential.common.jsonmap.JSONMap;
 import com.pila.credential.common.jwt.JWTSigner;
 import com.pila.credential.common.jwt.JWTVerifier;
+import com.pila.credential.common.signer.DefaultSignerProvider;
+import com.pila.credential.common.signer.SignerProvider;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
@@ -155,13 +157,13 @@ public class JWTCredential implements Credential {
 
     @Override
     public void addProof(String privKeyHex) throws Exception {
-        JWTSigner signer = new JWTSigner(privKeyHex);
+        addProofByProvider(new DefaultSignerProvider(privKeyHex));
+    }
 
-        // Sign the existing signing input
-        String signature = signer.signString(signingInput);
-
-        // Update signature
-        this.signature = signature;
+    @Override
+    public void addProofByProvider(SignerProvider signerProvider) throws Exception {
+        JWTSigner signer = new JWTSigner(signerProvider);
+        this.signature = signer.signString(signingInput);
     }
 
     @Override
@@ -179,9 +181,8 @@ public class JWTCredential implements Credential {
             throw new Exception("proof signature cannot be empty");
         }
 
-        // Use the provided signature directly
-        this.signature = Base64.getUrlEncoder().withoutPadding()
-                .encodeToString(proof.getSignature());
+        byte[] sig64 = JWTSigner.normalizeJwtSignature(proof.getSignature());
+        this.signature = Base64.getUrlEncoder().withoutPadding().encodeToString(sig64);
     }
 
     @Override

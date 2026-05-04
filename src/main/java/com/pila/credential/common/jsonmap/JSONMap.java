@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pila.credential.common.crypto.Crypto;
 import com.pila.credential.common.dto.Proof;
 import com.pila.credential.common.processor.Processor;
+import com.pila.credential.common.signer.DefaultSignerProvider;
+import com.pila.credential.common.signer.SignerProvider;
 import com.pila.credential.common.util.VCUtil;
 import com.pila.credential.common.verificationmethod.VerificationMethodResolver;
 
@@ -106,21 +108,24 @@ public class JSONMap extends HashMap<String, Object> {
     /**
      * Adds an ECDSA proof to the JSONMap.
      */
+    @Deprecated
     public void addECDSAProof(String privKeyHex,
             String verificationMethod,
-            String proofPurpose,
-            String didBaseURL) throws Exception {
+            String proofPurpose) throws Exception {
+        addECDSAProofByProvider(new DefaultSignerProvider(privKeyHex), verificationMethod, proofPurpose);
+    }
+
+    public void addECDSAProofByProvider(SignerProvider signerProvider,
+            String verificationMethod,
+            String proofPurpose) throws Exception {
+        if (signerProvider == null) {
+            throw new IllegalArgumentException("signerProvider cannot be null");
+        }
         if (verificationMethod == null || verificationMethod.isEmpty()) {
             throw new IllegalArgumentException("verification method is required");
         }
         if (proofPurpose == null || proofPurpose.isEmpty()) {
             throw new IllegalArgumentException("proof purpose is required");
-        }
-
-        VerificationMethodResolver resolver = new VerificationMethodResolver(didBaseURL);
-        boolean isValid = resolver.checkVerificationMethod(privKeyHex, verificationMethod);
-        if (!isValid) {
-            throw new Exception("private key and verification method do not match");
         }
 
         Proof proof = new Proof();
@@ -131,13 +136,20 @@ public class JSONMap extends HashMap<String, Object> {
         proof.setCryptosuite(ECDSA_RDFC_2019);
 
         byte[] signData = this.canonicalize();
-        byte[] signature = Crypto.ecdsaSign(signData, privKeyHex);
+        if (signData == null || signData.length != 32) {
+            throw new IllegalArgumentException("digest must be 32 bytes");
+        }
+        byte[] signature = signerProvider.sign(signData);
+        if (signature == null || (signature.length != 64 && signature.length != 65)) {
+            throw new IllegalArgumentException("signature length must be 64 or 65");
+        }
         proof.setProofValue(bytesToHex(signature));
 
         List<Proof> proofs = new ArrayList<>();
         proofs.add(proof);
         this.put("proof", VCUtil.serializeProofs(proofs));
     }
+
 
     /**
      * Adds a custom proof to the JSONMap.
