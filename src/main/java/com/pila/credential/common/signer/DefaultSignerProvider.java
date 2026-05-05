@@ -20,7 +20,9 @@ public final class DefaultSignerProvider implements SignerProvider {
     private static final ECParameterSpec CURVE_SPEC = ECNamedCurveTable.getParameterSpec("secp256k1");
 
     static {
-        Security.addProvider(new BouncyCastleProvider());
+        if (Security.getProvider("BC") == null) {
+            Security.addProvider(new BouncyCastleProvider());
+        }
     }
 
     private final PrivateKey privateKey;
@@ -78,4 +80,3 @@ public final class DefaultSignerProvider implements SignerProvider {
         return out;
     }
 }
-

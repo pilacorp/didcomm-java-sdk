@@ -159,6 +159,29 @@ The `parseCredential()` method supports:
 - JSON credentials (embedded proof format)
 - JWT credentials (parsing not yet implemented)
 
+Signing Credentials (SignerProvider)
+
+Use `SignerProvider` to sign with Vault/HSM/remote signers without passing private keys into the SDK:
+
+```java
+import com.pila.credential.common.signer.SignerProvider;
+import com.pila.credential.vc.Credential;
+
+SignerProvider provider = digest32 -> {
+  // Return 64-byte (R||S) or 65-byte (R||S||V) signature for the given SHA-256 digest.
+  throw new UnsupportedOperationException("implement signing");
+};
+
+Credential credential = ...;
+credential.addProofByProvider(provider);
+```
+
+Legacy local-key signing is still available:
+
+```java
+credential.addProof("0x<privKeyHex>");
+```
+
 The `verify()` method validates:
 - Proof signature using the verification method from the credential
 - DID document resolution (if needed)
