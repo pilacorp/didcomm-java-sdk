@@ -18,7 +18,7 @@ public interface Credential {
     /**
      * Adds a proof to the credential using a signing provider (Vault/HSM/local).
      *
-     * @param signerProvider The provider used to sign 32-byte digests
+     * @param signerProvider The provider used to sign 32-byte SHA-256 digests produced by the SDK
      * @throws Exception if proof addition fails
      */
     void addProofByProvider(SignerProvider signerProvider) throws Exception;

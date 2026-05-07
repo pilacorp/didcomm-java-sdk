@@ -16,6 +16,13 @@ import java.security.Security;
 import java.security.Signature;
 import java.util.Arrays;
 
+/**
+ * DefaultSignerProvider signs using an in-memory secp256k1 private key.
+ *
+ * <p>
+ * This is suitable for local/private-key usage (including production if your threat model allows it).
+ * For stronger key management, implement {@link SignerProvider} using Vault/HSM/remote signing services.
+ */
 public final class DefaultSignerProvider implements SignerProvider {
     private static final ECParameterSpec CURVE_SPEC = ECNamedCurveTable.getParameterSpec("secp256k1");
 
@@ -27,6 +34,12 @@ public final class DefaultSignerProvider implements SignerProvider {
 
     private final PrivateKey privateKey;
 
+    /**
+     * Creates a DefaultSignerProvider from a hex-encoded private key.
+     *
+     * <p>
+     * The {@code privKeyHex} parameter can include or omit the {@code 0x} prefix.
+     */
     public DefaultSignerProvider(String privKeyHex) throws Exception {
         if (privKeyHex == null || privKeyHex.isBlank()) {
             throw new IllegalArgumentException("privKeyHex is required");
@@ -46,6 +59,7 @@ public final class DefaultSignerProvider implements SignerProvider {
             throw new IllegalArgumentException("digest must be 32 bytes");
         }
 
+        // Input is already a 32-byte digest -> use raw ECDSA without hashing again.
         Signature sig = Signature.getInstance("NONEwithECDSA", "BC");
         sig.initSign(privateKey);
         sig.update(digest32);

@@ -115,6 +115,17 @@ public class JSONMap extends HashMap<String, Object> {
         addECDSAProofByProvider(new DefaultSignerProvider(privKeyHex), verificationMethod, proofPurpose);
     }
 
+    /**
+     * Adds a DataIntegrityProof (ecdsa-rdfc-2019) using a signing provider.
+     *
+     * <p>
+     * This method computes {@code digest32 = canonicalize()}, which already returns a 32-byte SHA-256
+     * digest of the canonical N-Quads form. The provider is expected to sign that digest.
+     *
+     * <p>
+     * The resulting {@code proofValue} is stored as hex of the raw signature bytes and accepts
+     * 64 bytes (R||S) or 65 bytes (R||S||V).
+     */
     public void addECDSAProofByProvider(SignerProvider signerProvider,
             String verificationMethod,
             String proofPurpose) throws Exception {

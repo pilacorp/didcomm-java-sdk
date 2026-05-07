@@ -45,6 +45,7 @@ public class JWTSigner {
             throw new IllegalArgumentException("signingString cannot be null");
         }
 
+        // ES256K (JWT) signs SHA-256(header.payload) and encodes the raw (R||S) signature as base64url.
         byte[] bytes = signingString.getBytes(StandardCharsets.UTF_8);
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         byte[] digest32 = digest.digest(bytes);
@@ -54,6 +55,13 @@ public class JWTSigner {
         return Base64.getUrlEncoder().withoutPadding().encodeToString(sig64);
     }
 
+    /**
+     * Normalizes a signature for JWT usage.
+     *
+     * <p>
+     * The JWT ES256K signature is {@code R(32)||S(32)} (64 bytes). If a provider returns
+     * {@code R||S||V} (65 bytes), the recovery id {@code V} is dropped.
+     */
     public static byte[] normalizeJwtSignature(byte[] signatureBytes) {
         if (signatureBytes == null) {
             throw new IllegalArgumentException("signature cannot be null");
