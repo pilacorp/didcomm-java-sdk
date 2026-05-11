@@ -116,6 +116,19 @@ public class JSONMap extends HashMap<String, Object> {
     }
 
     /**
+     * Legacy overload kept for backward compatibility.
+     *
+     * @deprecated Use {@link #addECDSAProofByProvider(SignerProvider, String, String, String)}.
+     */
+    @Deprecated
+    public void addECDSAProof(String privKeyHex,
+            String verificationMethod,
+            String proofPurpose,
+            String didBaseURL) throws Exception {
+        addECDSAProofByProvider(new DefaultSignerProvider(privKeyHex), verificationMethod, proofPurpose, didBaseURL);
+    }
+
+    /**
      * Adds a DataIntegrityProof (ecdsa-rdfc-2019) using a signing provider.
      *
      * <p>
@@ -129,6 +142,20 @@ public class JSONMap extends HashMap<String, Object> {
     public void addECDSAProofByProvider(SignerProvider signerProvider,
             String verificationMethod,
             String proofPurpose) throws Exception {
+        addECDSAProofByProvider(signerProvider, verificationMethod, proofPurpose, null);
+    }
+
+    /**
+     * Adds a DataIntegrityProof (ecdsa-rdfc-2019) using a signing provider and optionally verifies it
+     * against a DID resolver before mutating state.
+     *
+     * <p>If {@code didBaseURL} is non-empty, the SDK resolves the public key from {@code verificationMethod}
+     * and verifies the produced signature over the computed digest32. If verification fails, no proof is attached.</p>
+     */
+    public void addECDSAProofByProvider(SignerProvider signerProvider,
+            String verificationMethod,
+            String proofPurpose,
+            String didBaseURL) throws Exception {
         if (signerProvider == null) {
             throw new IllegalArgumentException("signerProvider cannot be null");
         }
@@ -155,6 +182,15 @@ public class JSONMap extends HashMap<String, Object> {
             throw new IllegalArgumentException("signature length must be 64 or 65");
         }
         proof.setProofValue(bytesToHex(signature));
+
+        if (didBaseURL != null && !didBaseURL.isBlank()) {
+            VerificationMethodResolver resolver = new VerificationMethodResolver(didBaseURL);
+            String publicKeyHex = resolver.getPublicKey(verificationMethod);
+            boolean ok = Crypto.ecdsaVerifySignature(publicKeyHex, proof.getProofValue(), signData);
+            if (!ok) {
+                throw new Exception("signature verification failed");
+            }
+        }
 
         List<Proof> proofs = new ArrayList<>();
         proofs.add(proof);

@@ -76,28 +76,8 @@ public class JSONCredential implements Credential {
         String issuer = (String) issuerObj;
         String verificationMethod = issuer + "#" + this.verificationMethod;
 
-        Object previousProofObj = credentialData.get("proof");
-        Proof previousProof = this.proof;
-
-        try {
-            ((JSONMap) credentialData).addECDSAProofByProvider(signerProvider, verificationMethod, "assertionMethod");
-
-            // Verify-after-sign: ensure the newly attached proof verifies via DID resolver.
-            String didBaseURL = CredentialConfig.getBaseURL();
-            boolean isValid = ((JSONMap) credentialData).verifyProof(didBaseURL);
-            if (!isValid) {
-                throw new Exception("signature verification failed");
-            }
-        } catch (Exception e) {
-            // Rollback on failure.
-            if (previousProofObj == null) {
-                credentialData.remove("proof");
-            } else {
-                credentialData.put("proof", previousProofObj);
-            }
-            this.proof = previousProof;
-            throw new Exception("json verify-after-sign failed: " + e.getMessage(), e);
-        }
+        String didBaseURL = CredentialConfig.getBaseURL();
+        ((JSONMap) credentialData).addECDSAProofByProvider(signerProvider, verificationMethod, "assertionMethod", didBaseURL);
     }
 
     @Override

@@ -25,6 +25,8 @@ import java.util.Arrays;
  */
 public final class DefaultSignerProvider implements SignerProvider {
     private static final ECParameterSpec CURVE_SPEC = ECNamedCurveTable.getParameterSpec("secp256k1");
+    private static final BigInteger CURVE_N = CURVE_SPEC.getN();
+    private static final BigInteger CURVE_N_HALF = CURVE_N.shiftRight(1);
 
     static {
         if (Security.getProvider("BC") == null) {
@@ -68,6 +70,11 @@ public final class DefaultSignerProvider implements SignerProvider {
         ASN1Sequence seq = (DLSequence) ASN1Sequence.fromByteArray(der);
         BigInteger r = ((ASN1Integer) seq.getObjectAt(0)).getPositiveValue();
         BigInteger s = ((ASN1Integer) seq.getObjectAt(1)).getPositiveValue();
+
+        // Enforce low-S to reduce ECDSA signature malleability.
+        if (s.compareTo(CURVE_N_HALF) > 0) {
+            s = CURVE_N.subtract(s);
+        }
 
         byte[] rs = new byte[64];
         System.arraycopy(toFixed32(r.toByteArray()), 0, rs, 0, 32);
