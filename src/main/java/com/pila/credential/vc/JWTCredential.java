@@ -162,8 +162,21 @@ public class JWTCredential implements Credential {
 
     @Override
     public void addProofByProvider(SignerProvider signerProvider) throws Exception {
-        JWTSigner signer = new JWTSigner(signerProvider);
-        this.signature = signer.signString(signingInput);
+        String previousSignature = this.signature;
+
+        try {
+            JWTSigner signer = new JWTSigner(signerProvider);
+            this.signature = signer.signString(signingInput);
+
+            // Verify-after-sign: ensure the newly attached signature verifies via DID resolver.
+            String didBaseURL = CredentialConfig.getBaseURL();
+            JWTVerifier verifier = new JWTVerifier(didBaseURL);
+            verifier.verifyJWT((String) serialize());
+        } catch (Exception e) {
+            // Rollback on failure.
+            this.signature = previousSignature;
+            throw new Exception("jwt verify-after-sign failed: " + e.getMessage(), e);
+        }
     }
 
     @Override

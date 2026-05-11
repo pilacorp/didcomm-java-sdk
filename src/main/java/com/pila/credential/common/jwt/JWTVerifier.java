@@ -6,6 +6,7 @@ import org.bouncycastle.util.encoders.Hex;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.Arrays;
 import java.util.Base64;
 
 /**
@@ -67,8 +68,10 @@ public class JWTVerifier {
         byte[] signatureBytes = Base64.getUrlDecoder().decode(parts[2]);
 
         // Verify signature
-        if (signatureBytes.length != 64) {
-            throw new Exception("invalid signature length");
+        if (signatureBytes.length == 65) {
+            signatureBytes = Arrays.copyOf(signatureBytes, 64);
+        } else if (signatureBytes.length != 64) {
+            throw new Exception("invalid signature length: got " + signatureBytes.length + ", want 64 or 65");
         }
 
         // Hash the signing string with SHA-256
