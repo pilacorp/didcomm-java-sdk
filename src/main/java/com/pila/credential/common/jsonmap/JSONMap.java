@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pila.credential.common.crypto.Crypto;
 import com.pila.credential.common.dto.Proof;
 import com.pila.credential.common.processor.Processor;
+import com.pila.credential.common.signer.DefaultSignerProvider;
+import com.pila.credential.common.signer.SignerProvider;
 import com.pila.credential.common.util.VCUtil;
 import com.pila.credential.common.verificationmethod.VerificationMethodResolver;
 
@@ -106,21 +108,62 @@ public class JSONMap extends HashMap<String, Object> {
     /**
      * Adds an ECDSA proof to the JSONMap.
      */
+    @Deprecated
+    public void addECDSAProof(String privKeyHex,
+            String verificationMethod,
+            String proofPurpose) throws Exception {
+        addECDSAProofByProvider(new DefaultSignerProvider(privKeyHex), verificationMethod, proofPurpose);
+    }
+
+    /**
+     * Legacy overload kept for backward compatibility.
+     *
+     * @deprecated Use {@link #addECDSAProofByProvider(SignerProvider, String, String, String)}.
+     */
+    @Deprecated
     public void addECDSAProof(String privKeyHex,
             String verificationMethod,
             String proofPurpose,
             String didBaseURL) throws Exception {
+        addECDSAProofByProvider(new DefaultSignerProvider(privKeyHex), verificationMethod, proofPurpose, didBaseURL);
+    }
+
+    /**
+     * Adds a DataIntegrityProof (ecdsa-rdfc-2019) using a signing provider.
+     *
+     * <p>
+     * This method computes {@code digest32 = canonicalize()}, which already returns a 32-byte SHA-256
+     * digest of the canonical N-Quads form. The provider is expected to sign that digest.
+     *
+     * <p>
+     * The resulting {@code proofValue} is stored as hex of the raw signature bytes and accepts
+     * 64 bytes (R||S) or 65 bytes (R||S||V).
+     */
+    public void addECDSAProofByProvider(SignerProvider signerProvider,
+            String verificationMethod,
+            String proofPurpose) throws Exception {
+        addECDSAProofByProvider(signerProvider, verificationMethod, proofPurpose, null);
+    }
+
+    /**
+     * Adds a DataIntegrityProof (ecdsa-rdfc-2019) using a signing provider and optionally verifies it
+     * against a DID resolver before mutating state.
+     *
+     * <p>If {@code didBaseURL} is non-empty, the SDK resolves the public key from {@code verificationMethod}
+     * and verifies the produced signature over the computed digest32. If verification fails, no proof is attached.</p>
+     */
+    public void addECDSAProofByProvider(SignerProvider signerProvider,
+            String verificationMethod,
+            String proofPurpose,
+            String didBaseURL) throws Exception {
+        if (signerProvider == null) {
+            throw new IllegalArgumentException("signerProvider cannot be null");
+        }
         if (verificationMethod == null || verificationMethod.isEmpty()) {
             throw new IllegalArgumentException("verification method is required");
         }
         if (proofPurpose == null || proofPurpose.isEmpty()) {
             throw new IllegalArgumentException("proof purpose is required");
-        }
-
-        VerificationMethodResolver resolver = new VerificationMethodResolver(didBaseURL);
-        boolean isValid = resolver.checkVerificationMethod(privKeyHex, verificationMethod);
-        if (!isValid) {
-            throw new Exception("private key and verification method do not match");
         }
 
         Proof proof = new Proof();
@@ -131,13 +174,29 @@ public class JSONMap extends HashMap<String, Object> {
         proof.setCryptosuite(ECDSA_RDFC_2019);
 
         byte[] signData = this.canonicalize();
-        byte[] signature = Crypto.ecdsaSign(signData, privKeyHex);
+        if (signData == null || signData.length != 32) {
+            throw new IllegalArgumentException("digest must be 32 bytes");
+        }
+        byte[] signature = signerProvider.sign(signData);
+        if (signature == null || (signature.length != 64 && signature.length != 65)) {
+            throw new IllegalArgumentException("signature length must be 64 or 65");
+        }
         proof.setProofValue(bytesToHex(signature));
+
+        if (didBaseURL != null && !didBaseURL.isBlank()) {
+            VerificationMethodResolver resolver = new VerificationMethodResolver(didBaseURL);
+            String publicKeyHex = resolver.getPublicKey(verificationMethod);
+            boolean ok = Crypto.ecdsaVerifySignature(publicKeyHex, proof.getProofValue(), signData);
+            if (!ok) {
+                throw new Exception("signature verification failed");
+            }
+        }
 
         List<Proof> proofs = new ArrayList<>();
         proofs.add(proof);
         this.put("proof", VCUtil.serializeProofs(proofs));
     }
+
 
     /**
      * Adds a custom proof to the JSONMap.

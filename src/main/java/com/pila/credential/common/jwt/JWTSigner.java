@@ -1,16 +1,17 @@
 package com.pila.credential.common.jwt;
 
-import com.starkbank.ellipticcurve.Ecdsa;
-import com.starkbank.ellipticcurve.PrivateKey;
-import com.starkbank.ellipticcurve.Signature;
+import com.pila.credential.common.signer.DefaultSignerProvider;
+import com.pila.credential.common.signer.SignerProvider;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.security.MessageDigest;
 
 /**
  * JWT signer for ES256K algorithm.
  */
 public class JWTSigner {
-    private String privKeyHex;
+    private final SignerProvider signerProvider;
 
     /**
      * Creates a new JWT signer instance.
@@ -18,7 +19,18 @@ public class JWTSigner {
      * @param privKeyHex The private key in hex format
      */
     public JWTSigner(String privKeyHex) {
-        this.privKeyHex = privKeyHex;
+        try {
+            this.signerProvider = new DefaultSignerProvider(privKeyHex);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("invalid privKeyHex: " + e.getMessage(), e);
+        }
+    }
+
+    public JWTSigner(SignerProvider signerProvider) {
+        if (signerProvider == null) {
+            throw new IllegalArgumentException("signerProvider cannot be null");
+        }
+        this.signerProvider = signerProvider;
     }
 
     /**
@@ -29,30 +41,39 @@ public class JWTSigner {
      * @throws Exception if signing fails
      */
     public String signString(String signingString) throws Exception {
-        // Convert hex private key to PrivateKey object
-        PrivateKey privateKey = PrivateKey.fromString(privKeyHex);
+        if (signingString == null) {
+            throw new IllegalArgumentException("signingString cannot be null");
+        }
 
-        // Sign the message
-        Signature signature = Ecdsa.sign(signingString, privateKey);
+        // ES256K (JWT) signs SHA-256(header.payload) and encodes the raw (R||S) signature as base64url.
+        byte[] bytes = signingString.getBytes(StandardCharsets.UTF_8);
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        byte[] digest32 = digest.digest(bytes);
 
-        // Get R and S values
-        byte[] r = signature.r.toByteArray();
-        byte[] s = signature.s.toByteArray();
+        byte[] sig = signerProvider.sign(digest32);
+        byte[] sig64 = normalizeJwtSignature(sig);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(sig64);
+    }
 
-        // Ensure R and S are 32 bytes each (pad with leading zeros if needed)
-        byte[] rPadded = new byte[32];
-        byte[] sPadded = new byte[32];
-        int rOffset = Math.max(0, 32 - r.length);
-        int sOffset = Math.max(0, 32 - s.length);
-        System.arraycopy(r, 0, rPadded, rOffset, Math.min(32, r.length));
-        System.arraycopy(s, 0, sPadded, sOffset, Math.min(32, s.length));
-
-        // Concatenate R and S (64 bytes total)
-        byte[] signatureBytes = new byte[64];
-        System.arraycopy(rPadded, 0, signatureBytes, 0, 32);
-        System.arraycopy(sPadded, 0, signatureBytes, 32, 32);
-
-        // Encode as base64url
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(signatureBytes);
+    /**
+     * Normalizes a signature for JWT usage.
+     *
+     * <p>
+     * The JWT ES256K signature is {@code R(32)||S(32)} (64 bytes). If a provider returns
+     * {@code R||S||V} (65 bytes), the recovery id {@code V} is dropped.
+     */
+    public static byte[] normalizeJwtSignature(byte[] signatureBytes) {
+        if (signatureBytes == null) {
+            throw new IllegalArgumentException("signature cannot be null");
+        }
+        if (signatureBytes.length == 64) {
+            return signatureBytes;
+        }
+        if (signatureBytes.length == 65) {
+            byte[] out = new byte[64];
+            System.arraycopy(signatureBytes, 0, out, 0, 64);
+            return out;
+        }
+        throw new IllegalArgumentException("signature length must be 64 or 65");
     }
 }

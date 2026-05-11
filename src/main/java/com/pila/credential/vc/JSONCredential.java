@@ -2,6 +2,8 @@ package com.pila.credential.vc;
 
 import com.pila.credential.common.dto.Proof;
 import com.pila.credential.common.jsonmap.JSONMap;
+import com.pila.credential.common.signer.DefaultSignerProvider;
+import com.pila.credential.common.signer.SignerProvider;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -61,6 +63,11 @@ public class JSONCredential implements Credential {
 
     @Override
     public void addProof(String privKeyHex) throws Exception {
+        addProofByProvider(new DefaultSignerProvider(privKeyHex));
+    }
+
+    @Override
+    public void addProofByProvider(SignerProvider signerProvider) throws Exception {
         Object issuerObj = credentialData.get("issuer");
         if (!(issuerObj instanceof String)) {
             throw new Exception("issuer is missing or invalid");
@@ -68,9 +75,9 @@ public class JSONCredential implements Credential {
 
         String issuer = (String) issuerObj;
         String verificationMethod = issuer + "#" + this.verificationMethod;
-        String didBaseURL = CredentialConfig.getBaseURL();
 
-        ((JSONMap) credentialData).addECDSAProof(privKeyHex, verificationMethod, "assertionMethod", didBaseURL);
+        String didBaseURL = CredentialConfig.getBaseURL();
+        ((JSONMap) credentialData).addECDSAProofByProvider(signerProvider, verificationMethod, "assertionMethod", didBaseURL);
     }
 
     @Override

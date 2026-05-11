@@ -1,6 +1,7 @@
 package com.pila.credential.vc;
 
 import com.pila.credential.common.dto.Proof;
+import com.pila.credential.common.signer.SignerProvider;
 
 /**
  * Credential interface for verifiable credentials.
@@ -13,6 +14,14 @@ public interface Credential {
      * @throws Exception if proof addition fails
      */
     void addProof(String privKeyHex) throws Exception;
+
+    /**
+     * Adds a proof to the credential using a signing provider (Vault/HSM/local).
+     *
+     * @param signerProvider The provider used to sign 32-byte SHA-256 digests produced by the SDK
+     * @throws Exception if proof addition fails
+     */
+    void addProofByProvider(SignerProvider signerProvider) throws Exception;
 
     /**
      * Gets the signing input (canonicalized data) for the credential.

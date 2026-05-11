@@ -5,24 +5,24 @@ Quick guide for distributing and consuming the JAR.
 Build the JAR
 
 - mvn -DskipTests package
-- Artifact (built by Maven): target/didcomm-java-sdk-1.1-SNAPSHOT.jar
-- If you moved the JAR to repo root: ./didcomm-java-sdk-1.1-SNAPSHOT.jar
+- Artifact (built by Maven): target/didcomm-java-sdk-1.2.1-SNAPSHOT.jar
+- If you moved the JAR to repo root: ./didcomm-java-sdk-1.2.1-SNAPSHOT.jar
 
 Give the JAR to your partner
 
-- Share the JAR file (now at repo root): ./didcomm-java-sdk-1.1-SNAPSHOT.jar
+- Share the JAR file (now at repo root): ./didcomm-java-sdk-1.2.1-SNAPSHOT.jar
 
 Partner setup options
 
 - Maven (install to local repo):
 
-  - mvn install:install-file -Dfile=./didcomm-java-sdk-1.1-SNAPSHOT.jar -DgroupId=com.pila -DartifactId=didcomm-java-sdk -Dversion=1.1-SNAPSHOT -Dpackaging=jar
+  - mvn install:install-file -Dfile=./didcomm-java-sdk-1.2.1-SNAPSHOT.jar -DgroupId=com.pila -DartifactId=didcomm-java-sdk -Dversion=1.2.1-SNAPSHOT -Dpackaging=jar
   - Then add dependency in their pom.xml:
     ```xml
     <dependency>
         <groupId>com.pila</groupId>
         <artifactId>didcomm-java-sdk</artifactId>
-        <version>1.1-SNAPSHOT</version>
+        <version>1.2.1-SNAPSHOT</version>
     </dependency>
     ```
 
@@ -35,20 +35,19 @@ Partner setup options
         flatDir { dirs 'libs' } 
     }
     dependencies { 
-        implementation name: 'didcomm-java-sdk-1.1-SNAPSHOT' 
+        implementation name: 'didcomm-java-sdk-1.2.1-SNAPSHOT' 
     }
     ```
   - Place the JAR in project/libs/
 
 - Direct classpath (apps/scripts):
-  - java -cp ./didcomm-java-sdk-1.1-SNAPSHOT.jar:bcprov-jdk18on-1.78.1.jar:jackson-databind-2.17.2.jar YourMain
+  - java -cp ./didcomm-java-sdk-1.2.1-SNAPSHOT.jar:bcprov-jdk18on-1.78.1.jar:jackson-databind-2.17.2.jar YourMain
 
 Runtime dependencies (partner must include)
 
 **Core dependencies (required for basic functionality):**
 - org.bouncycastle:bcprov-jdk18on:1.78.1
 - com.fasterxml.jackson.core:jackson-databind:2.17.2
-- com.starkbank.ellipticcurve:starkbank-ecdsa:1.0.2
 
 **Additional dependencies (required for JSON-LD canonicalization and credential verification):**
 - com.apicatalog:titanium-json-ld:1.7.0
@@ -159,6 +158,29 @@ System.out.println(new String(contents));
 The `parseCredential()` method supports:
 - JSON credentials (embedded proof format)
 - JWT credentials (parsing not yet implemented)
+
+Signing Credentials (SignerProvider)
+
+Use `SignerProvider` to sign with Vault/HSM/remote signers without passing private keys into the SDK:
+
+```java
+import com.pila.credential.common.signer.SignerProvider;
+import com.pila.credential.vc.Credential;
+
+SignerProvider provider = digest32 -> {
+  // Return 64-byte (R||S) or 65-byte (R||S||V) signature for the given SHA-256 digest.
+  throw new UnsupportedOperationException("implement signing");
+};
+
+Credential credential = ...;
+credential.addProofByProvider(provider);
+```
+
+Legacy local-key signing is still available:
+
+```java
+credential.addProof("0x<privKeyHex>");
+```
 
 The `verify()` method validates:
 - Proof signature using the verification method from the credential
