@@ -10,6 +10,8 @@ import com.pila.credential.common.signer.SignerProvider;
 import com.pila.credential.common.util.VCUtil;
 import com.pila.credential.common.verificationmethod.VerificationMethodResolver;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.*;
 
@@ -243,6 +245,9 @@ public class JSONMap extends HashMap<String, Object> {
         if (proofMap.containsKey("cryptosuite") && proofMap.get("cryptosuite") instanceof String) {
             result.setCryptosuite((String) proofMap.get("cryptosuite"));
         }
+        if (proofMap.containsKey("jws") && proofMap.get("jws") instanceof String) {
+            result.setJws((String) proofMap.get("jws"));
+        }
 
         return result;
     }
@@ -288,6 +293,11 @@ public class JSONMap extends HashMap<String, Object> {
         } else if (ECDSA_SECP256K1_SIGNATURE_2019.equals(proof.getType())
                 || ECDSA_SECP_KEY.equals(proof.getType())) {
 
+            // Two encodings exist in the wild for this proof type: a raw hex proofValue
+            // (legacy) and a detachable ES256K JWS, which the wallet SDKs emit.
+            if (proof.getJws() != null && !proof.getJws().isEmpty()) {
+                return verifyJwsProof(didBaseURL, proof);
+            }
             return verifyEcdsaProofLegacy();
 
         } else if (DATA_INTEGRITY_PROOF.equals(proof.getType())
@@ -308,6 +318,62 @@ public class JSONMap extends HashMap<String, Object> {
     private boolean verifyECDSA(String publicKeyHex, Proof proof) throws Exception {
         byte[] doc = this.canonicalize();
         return Crypto.ecdsaVerifySignature(publicKeyHex, proof.getProofValue(), doc);
+    }
+
+    /**
+     * Verifies an {@code EcdsaSecp256k1Signature2019} proof carried as an ES256K JWS.
+     *
+     * <p>
+     * The JWS payload is the signed document without its proof. It is compared against this
+     * document before the signature is checked, so a signature made over different content cannot
+     * be replayed onto this one.
+     */
+    private boolean verifyJwsProof(String didBaseURL, Proof proof) throws Exception {
+        String[] parts = proof.getJws().split("\\.");
+        if (parts.length != 3) {
+            throw new Exception("proof jws is malformed: expected three parts");
+        }
+        if (parts[1].isEmpty()) {
+            throw new Exception("detached jws payloads are not supported");
+        }
+
+        Base64.Decoder decoder = Base64.getUrlDecoder();
+
+        Map<String, Object> header = objectMapper.readValue(decoder.decode(parts[0]),
+                new TypeReference<Map<String, Object>>() {
+                });
+        Object alg = header.get("alg");
+        if (!"ES256K".equals(alg)) {
+            throw new Exception("unsupported jws algorithm: " + alg);
+        }
+
+        // Bind the signed payload to this document: everything except the proof must match.
+        Map<String, Object> payload = objectMapper.readValue(decoder.decode(parts[1]),
+                new TypeReference<Map<String, Object>>() {
+                });
+        Map<String, Object> expected = new HashMap<>(this);
+        expected.remove("proof");
+        if (!payload.equals(expected)) {
+            throw new Exception("jws payload does not match the document it is attached to");
+        }
+
+        String verificationMethod = proof.getVerificationMethod();
+        if (verificationMethod == null || verificationMethod.isEmpty()) {
+            Object kid = header.get("kid");
+            verificationMethod = kid != null ? kid.toString() : null;
+        }
+        if (verificationMethod == null || verificationMethod.isEmpty()) {
+            throw new Exception("proof verificationMethod is missing or invalid in the request");
+        }
+
+        VerificationMethodResolver resolver = new VerificationMethodResolver(didBaseURL);
+        String publicKey = resolver.getDefaultPublicKey(verificationMethod);
+
+        byte[] signingInput = (parts[0] + "." + parts[1]).getBytes(StandardCharsets.US_ASCII);
+        byte[] digest = MessageDigest.getInstance("SHA-256").digest(signingInput);
+        byte[] signature = decoder.decode(parts[2]);
+
+        return Crypto.ecdsaVerifySignature(publicKey, bytesToHex(signature), digest);
     }
 
     /**

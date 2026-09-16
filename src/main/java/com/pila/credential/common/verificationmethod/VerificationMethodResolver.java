@@ -34,8 +34,37 @@ public class VerificationMethodResolver {
      * @throws Exception if resolution fails
      */
     public String getDefaultPublicKey(String issuer) throws Exception {
-        // throw Exception haven't been implemented
-        throw new Exception("not implemented");
+        if (issuer == null || issuer.isEmpty()) {
+            throw new Exception("issuer is required");
+        }
+        if (issuer.indexOf('#') > 0) {
+            return getPublicKey(issuer);
+        }
+
+        DIDDocument doc = resolveToDoc(issuer);
+
+        // Prefer the DID's authentication method, then fall back to the first
+        // verification method in the document.
+        if (doc.getAuthentication() != null) {
+            for (String vmId : doc.getAuthentication()) {
+                if (vmId != null && !vmId.isEmpty()) {
+                    return getPublicKey(vmId);
+                }
+            }
+        }
+
+        if (doc.getVerificationMethod() != null && !doc.getVerificationMethod().isEmpty()) {
+            VerificationMethodEntry vm = doc.getVerificationMethod().get(0);
+            if (vm.getPublicKeyHex() != null && !vm.getPublicKeyHex().isEmpty()) {
+                String publicKey = vm.getPublicKeyHex();
+                return publicKey.startsWith("0x") ? publicKey.substring(2) : publicKey;
+            }
+            if (vm.getPublicKeyJwk() != null) {
+                return jwkToHex(vm.getPublicKeyJwk());
+            }
+        }
+
+        throw new Exception("no public key found for DID '" + issuer + "'");
     }
 
     /**

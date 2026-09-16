@@ -1,7 +1,9 @@
 package com.pila.credential.common.processor;
 
 import com.apicatalog.jsonld.JsonLd;
+import com.apicatalog.jsonld.JsonLdOptions;
 import com.apicatalog.jsonld.document.JsonDocument;
+import com.apicatalog.jsonld.uri.UriValidationPolicy;
 import com.apicatalog.rdf.nquads.NQuadsWriter;
 
 import com.apicatalog.rdf.canon.RdfCanon;
@@ -39,9 +41,21 @@ public class Processor {
         // 1) Create RDFC canonicalizer
         var canon = RdfCanon.create("SHA-256", new RdfCanonTimeTicker(5 * 1000));
 
-        // 2) Provide RDF from JSON-LD to canonicalizer using local context loader
+        // 2) Provide RDF from JSON-LD to canonicalizer using local context loader.
+        //
+        // URI validation is disabled on purpose. Credentials issued by the Go SDK
+        // (json-gold) carry types such as "IdentifyCredential" that no context defines,
+        // which expand to relative IRIs. Titanium's default policy rejects those IRIs and
+        // silently drops the statements - for such a credential the whole document
+        // disappears and the signing input degrades to SHA-256 of an empty N-Quads set.
+        // UriValidationPolicy.None keeps them, so this produces byte-for-byte the same
+        // canonical N-Quads as json-gold and proofs verify across both SDKs.
+        JsonLdOptions options = new JsonLdOptions();
+        options.setDocumentLoader(new LocalContextDocumentLoader());
+        options.setUriValidation(UriValidationPolicy.None);
+
         JsonLd.toRdf(document)
-                .loader(new LocalContextDocumentLoader())
+                .options(options)
                 .provide(canon);
 
         // 3) Write canonical N-Quads to writer
