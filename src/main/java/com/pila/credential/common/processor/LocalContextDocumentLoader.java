@@ -31,10 +31,13 @@ public final class LocalContextDocumentLoader implements DocumentLoader {
 
     // Map remote URL -> classpath resource under contexts/
     private static final Map<String, String> WELL_KNOWN_CONTEXTS = Map.of(
+            "https://www.w3.org/2018/credentials/v1", CLASSPATH_PREFIX + "w3c.credential.v1.json",
+            "https://www.w3.org/2018/credentials/v1.jsonld", CLASSPATH_PREFIX + "w3c.credential.v1.json",
             "https://www.w3.org/ns/credentials/v2", CLASSPATH_PREFIX + "w3c.credential.v2.json",
             "https://www.w3.org/ns/credentials/v2.jsonld", CLASSPATH_PREFIX + "w3c.credential.v2.json",
             "https://www.w3.org/ns/credentials/examples/v2", CLASSPATH_PREFIX + "w3c.credential.examples.v2.json",
-            "https://www.w3.org/ns/credentials/examples/v2.jsonld", CLASSPATH_PREFIX + "w3c.credential.examples.v2.json"
+            "https://www.w3.org/ns/credentials/examples/v2.jsonld", CLASSPATH_PREFIX + "w3c.credential.examples.v2.json",
+            "https://w3id.org/security/data-integrity/v2", CLASSPATH_PREFIX + "w3c.security.data-integrity.v2.json"
     );
 
     private final DocumentLoader fallback;
