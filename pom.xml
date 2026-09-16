@@ -90,6 +90,8 @@
                              kept out of the published library jar. -->
                         <exclude>com/pila/DecryptMain*.class</exclude>
                         <exclude>com/pila/VerifyMain*.class</exclude>
+                        <!-- Sample JWEs are demo input only; nothing in the jar reads them. -->
+                        <exclude>samples/**</exclude>
                     </excludes>
                 </configuration>
             </plugin>
