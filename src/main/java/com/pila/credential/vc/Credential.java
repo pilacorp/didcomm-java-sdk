@@ -24,12 +24,14 @@ public interface Credential {
     void addProofByProvider(SignerProvider signerProvider) throws Exception;
 
     /**
-     * Gets the signing input (canonicalized data) for the credential.
-     * 
-     * @return The signing input bytes
-     * @throws Exception if getting signing input fails
+     * Gets the signing input: SHA-256 digest of the canonical document body (Go GetSigningInput).
      */
     byte[] getSigningInput() throws Exception;
+
+    /**
+     * Builds hashData for external signing from a document digest and proof options.
+     */
+    byte[] createProofSigning(byte[] docHash, Proof proof) throws Exception;
 
     /**
      * Adds a custom proof to the credential.

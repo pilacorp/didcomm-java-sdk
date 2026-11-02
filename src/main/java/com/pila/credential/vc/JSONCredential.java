@@ -98,7 +98,12 @@ public class JSONCredential implements Credential {
 
     @Override
     public byte[] getSigningInput() throws Exception {
-        return ((JSONMap) credentialData).canonicalize();
+        return ((JSONMap) credentialData).getDocumentDigest();
+    }
+
+    @Override
+    public byte[] createProofSigning(byte[] docHash, Proof proof) throws Exception {
+        return ((JSONMap) credentialData).createProofSigning(docHash, proof);
     }
 
     @Override

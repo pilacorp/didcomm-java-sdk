@@ -179,6 +179,11 @@ public class JWTCredential implements Credential {
     }
 
     @Override
+    public byte[] createProofSigning(byte[] docHash, Proof proof) throws Exception {
+        throw new UnsupportedOperationException("createProofSigning applies to JSON-LD credentials only");
+    }
+
+    @Override
     public void addCustomProof(Proof proof) throws Exception {
         if (proof == null) {
             throw new IllegalArgumentException("proof cannot be null");

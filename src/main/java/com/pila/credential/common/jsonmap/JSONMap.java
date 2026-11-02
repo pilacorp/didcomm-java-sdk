@@ -9,11 +9,19 @@ import com.pila.credential.common.signer.DefaultSignerProvider;
 import com.pila.credential.common.signer.SignerProvider;
 import com.pila.credential.common.util.Multibase;
 import com.pila.credential.common.util.VCUtil;
+import com.pila.credential.common.verificationmethod.DIDDocument;
+import com.pila.credential.common.verificationmethod.StrictPurposeCheck;
+import com.pila.credential.common.verificationmethod.VerificationMethodEntry;
+import com.pila.credential.common.verificationmethod.VerificationMethodKeyKind;
 import com.pila.credential.common.verificationmethod.VerificationMethodResolver;
 
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.PublicKey;
+import org.bouncycastle.asn1.x9.X9ECParameters;
+import org.bouncycastle.crypto.ec.CustomNamedCurves;
+import org.bouncycastle.jce.interfaces.ECPublicKey;
 import java.time.Instant;
 import java.util.*;
 
@@ -239,16 +247,27 @@ public class JSONMap extends HashMap<String, Object> {
 
 
     /**
+     * SHA-256 digest of the canonical document body (without proof). External signing entry point.
+     */
+    public byte[] getDocumentDigest() throws Exception {
+        return documentDigest();
+    }
+
+    /**
+     * Builds section 3.2.4 hashData from a document digest and proof options.
+     */
+    public byte[] createProofSigning(byte[] docHash, Proof proof) throws Exception {
+        return proofHashData(docHash, proof);
+    }
+
+    /**
      * Adds a custom proof to the JSONMap.
      */
     public void addCustomProof(Proof proof) throws Exception {
         if (proof == null) {
             throw new IllegalArgumentException("proof is null");
         }
-
-        List<Proof> proofs = new ArrayList<>();
-        proofs.add(proof);
-        this.put("proof", VCUtil.serializeProofs(proofs));
+        appendProof(proof);
     }
 
     /**
@@ -323,26 +342,49 @@ public class JSONMap extends HashMap<String, Object> {
     }
 
     private boolean verifyOneProof(String didBaseURL, Proof proof) throws Exception {
+        VerificationMethodResolver resolver = new VerificationMethodResolver(didBaseURL);
         if (JWT_PROOF_2020.equals(proof.getType())) {
             Object issuerObj = this.get("issuer");
             if (!(issuerObj instanceof String)) {
                 throw new Exception("issuer is missing or invalid in the request");
             }
-            VerificationMethodResolver resolver = new VerificationMethodResolver(didBaseURL);
             String publicKey = resolver.getDefaultPublicKey((String) issuerObj);
             Map<String, Object> reqMap = new HashMap<>(this);
-            return Crypto.verifyJwtProof(reqMap, publicKey);
+            if (!Crypto.verifyJwtProof(reqMap, publicKey)) {
+                return false;
+            }
+            if (proof.getVerificationMethod() != null && !proof.getVerificationMethod().isEmpty()) {
+                String didPart = didFromVerificationMethod(proof.getVerificationMethod());
+                DIDDocument doc = resolver.resolveDocument(didPart);
+                VerificationMethodEntry vm = resolver.findVerificationMethod(proof.getVerificationMethod());
+                StrictPurposeCheck.enforce(doc, vm, "assertionMethod", proof.getCreated());
+            }
+            return true;
         }
         if (ECDSA_SECP256K1_SIGNATURE_2019.equals(proof.getType())
                 || ECDSA_SECP_KEY.equals(proof.getType())) {
-            return verifyEcdsaSecp256k1Proof(didBaseURL, proof);
+            return verifyEcdsaSecp256k1Proof(resolver, proof);
         }
         if (DATA_INTEGRITY_PROOF.equals(proof.getType()) && ECDSA_RDFC_2019.equals(proof.getCryptosuite())) {
-            VerificationMethodResolver resolver = new VerificationMethodResolver(didBaseURL);
-            PublicKey publicKey = resolver.ecPublicKeyFromEntry(resolver.findVerificationMethod(proof.getVerificationMethod()));
-            return verifyECDSA(publicKey, proof);
+            VerificationMethodEntry vmEntry = resolver.findVerificationMethod(proof.getVerificationMethod());
+            String didPart = didFromVerificationMethod(proof.getVerificationMethod());
+            DIDDocument doc = resolver.resolveDocument(didPart);
+            PublicKey publicKey = resolver.ecPublicKeyFromEntry(vmEntry);
+            if (!verifyECDSA(publicKey, proof)) {
+                return false;
+            }
+            StrictPurposeCheck.enforce(doc, vmEntry, proof.getProofPurpose(), proof.getCreated());
+            return true;
         }
         throw new Exception("unsupported proof type: " + proof.getType());
+    }
+
+    private static String didFromVerificationMethod(String verificationMethodURL) throws Exception {
+        int hashIndex = verificationMethodURL.indexOf('#');
+        if (hashIndex <= 0) {
+            throw new Exception("verification method " + verificationMethodURL + " is not a DID URL");
+        }
+        return verificationMethodURL.substring(0, hashIndex);
     }
 
     /**
@@ -363,76 +405,70 @@ public class JSONMap extends HashMap<String, Object> {
         return Crypto.ecdsaVerifySignature(publicKeyToHex(publicKey), proof.getProofValue(), doc);
     }
 
-    private boolean verifyEcdsaSecp256k1Proof(String didBaseURL, Proof proof) throws Exception {
+    private boolean verifyEcdsaSecp256k1Proof(VerificationMethodResolver resolver, Proof proof) throws Exception {
         if (proof.getJws() == null || proof.getJws().isEmpty()) {
-            return verifyEcdsaProofLegacy();
+            throw new Exception(ECDSA_SECP256K1_SIGNATURE_2019 + ": malformed detached JWS");
         }
         String[] parts = JwsDetached.splitDetachedJws(proof.getJws());
         if (parts == null) {
-            throw new Exception("malformed detached JWS");
+            throw new Exception(ECDSA_SECP256K1_SIGNATURE_2019 + ": malformed detached JWS");
         }
         String alg = JwsDetached.algFromEncodedHeader(parts[0]);
         if (!ALG_ES256K.equals(alg)) {
-            throw new Exception("unsupported jws algorithm: " + alg);
+            throw new Exception(ECDSA_SECP256K1_SIGNATURE_2019 + ": jws alg must be " + ALG_ES256K + ", got " + alg);
         }
-        VerificationMethodResolver resolver = new VerificationMethodResolver(didBaseURL);
-        PublicKey publicKey = resolver.ecPublicKeyFromEntry(resolver.findVerificationMethod(proof.getVerificationMethod()));
+        VerificationMethodEntry vmEntry = resolver.findVerificationMethod(proof.getVerificationMethod());
+        if (VerificationMethodKeyKind.fromEntry(vmEntry) != VerificationMethodKeyKind.SECP256K1) {
+            throw new Exception(ECDSA_SECP256K1_SIGNATURE_2019 + ": verification method does not hold a secp256k1 key");
+        }
+        String didPart = didFromVerificationMethod(proof.getVerificationMethod());
+        DIDDocument doc = resolver.resolveDocument(didPart);
+        PublicKey publicKey = resolver.ecPublicKeyFromEntry(vmEntry);
         byte[] hashData = ecdsaHashData(proof);
         byte[] signingInput = JwsDetached.signingInput(parts[0], hashData);
         byte[] digest = sha256(signingInput);
-        byte[] signature = Base64.getUrlDecoder().decode(parts[1]);
+        byte[] signature = JwsDetached.decodeCanonicalSignature(parts[1]);
         if (signature.length == 65) {
             signature = Arrays.copyOf(signature, 64);
         }
-        return Crypto.verifyEcdsaRaw(publicKey, digest, signature);
-    }
-
-    /**
-     * Verifies an ECDSA-signed JSONMap (legacy format).
-     */
-    private boolean verifyEcdsaProofLegacy() throws Exception {
-        Object proofObj = this.get("proof");
-        if (!(proofObj instanceof Map)) {
-            throw new Exception("proof value is missing or invalid in the request");
+        if (signature.length != 64) {
+            throw new Exception(ECDSA_SECP256K1_SIGNATURE_2019 + ": jws signature is " + signature.length
+                    + " bytes, want 64 (r||s)");
         }
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> proofMap = (Map<String, Object>) proofObj;
-
-        Object proofValueObj = proofMap.get("proofValue");
-        if (!(proofValueObj instanceof String) || ((String) proofValueObj).isEmpty()) {
-            throw new Exception("proof value is missing or invalid in the request");
+        X9ECParameters ecParams = CustomNamedCurves.getByName("secp256k1");
+        BigInteger halfN = ecParams.getN().shiftRight(1);
+        BigInteger s = new BigInteger(1, signature, 32, 32);
+        if (s.compareTo(halfN) > 0) {
+            throw new Exception(ECDSA_SECP256K1_SIGNATURE_2019 + ": jws signature is not low-S");
         }
-
-        String proofValue = (String) proofValueObj;
-
-        Object verificationMethodObj = proofMap.get("verificationMethod");
-        if (!(verificationMethodObj instanceof String) || ((String) verificationMethodObj).isEmpty()) {
-            throw new Exception("proof verificationMethod is missing or invalid in the request");
+        if (!Crypto.verifyEcdsaRaw(publicKey, digest, signature)) {
+            return false;
         }
-
-        String publicKeyHex = (String) verificationMethodObj;
-
-        byte[] signatureBytes = hexToBytes(proofValue);
-
-        Map<String, Object> reqCopy = new HashMap<>();
-        for (Map.Entry<String, Object> entry : this.entrySet()) {
-            if (!"proof".equals(entry.getKey())) {
-                reqCopy.put(entry.getKey(), entry.getValue());
-            }
-        }
-
-        byte[] message = objectMapper.writeValueAsBytes(reqCopy);
-
-        byte[] pubBytes = Crypto.keyToBytes(publicKeyHex);
-
-        return Crypto.verifyJSONSignature(pubBytes, message, signatureBytes);
+        StrictPurposeCheck.enforce(doc, vmEntry, proof.getProofPurpose(), proof.getCreated());
+        return true;
     }
 
     private void appendProof(Proof proof) throws Exception {
-        List<Proof> proofs = new ArrayList<>();
-        proofs.add(proof);
-        this.put("proof", VCUtil.serializeProofs(proofs));
+        List<Proof> merged = new ArrayList<>();
+        for (Object raw : rawProofList()) {
+            merged.add(parseRawToProof(raw));
+        }
+        merged.add(proof);
+        this.put("proof", VCUtil.serializeProofs(merged));
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Object> rawProofList() {
+        Object proofObj = this.get("proof");
+        if (proofObj == null) {
+            return new ArrayList<>();
+        }
+        if (proofObj instanceof List) {
+            return (List<Object>) proofObj;
+        }
+        List<Object> single = new ArrayList<>();
+        single.add(proofObj);
+        return single;
     }
 
     private byte[] documentDigest() throws Exception {

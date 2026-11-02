@@ -21,6 +21,12 @@ public class VerificationMethodEntry {
     @JsonProperty("publicKeyJwk")
     private JWK publicKeyJwk;
 
+    @JsonProperty("revoked")
+    private String revoked;
+
+    @JsonProperty("revocationReason")
+    private String revocationReason;
+
     public String getId() {
         return id;
     }
@@ -59,5 +65,21 @@ public class VerificationMethodEntry {
 
     public void setPublicKeyJwk(JWK publicKeyJwk) {
         this.publicKeyJwk = publicKeyJwk;
+    }
+
+    public String getRevoked() {
+        return revoked;
+    }
+
+    public void setRevoked(String revoked) {
+        this.revoked = revoked;
+    }
+
+    public String getRevocationReason() {
+        return revocationReason;
+    }
+
+    public void setRevocationReason(String revocationReason) {
+        this.revocationReason = revocationReason;
     }
 }

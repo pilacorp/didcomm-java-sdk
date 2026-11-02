@@ -72,4 +72,16 @@ public final class JwsDetached {
         }
         return new String[] { header, sig };
     }
+
+    /**
+     * Decodes a base64url JWS signature with a single canonical spelling (Go Strict() parity).
+     */
+    public static byte[] decodeCanonicalSignature(String encSig) throws Exception {
+        byte[] decoded = URL_DECODER.decode(encSig);
+        String reencoded = URL_ENCODER.encodeToString(decoded);
+        if (!reencoded.equals(encSig)) {
+            throw new Exception("non-canonical base64url jws signature");
+        }
+        return decoded;
+    }
 }

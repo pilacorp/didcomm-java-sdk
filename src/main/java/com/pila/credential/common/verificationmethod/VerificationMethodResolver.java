@@ -278,6 +278,13 @@ public class VerificationMethodResolver {
     }
 
     /**
+     * Resolves a DID to its document (for verification and strict-purpose checks).
+     */
+    public DIDDocument resolveDocument(String did) throws Exception {
+        return resolveToDoc(did);
+    }
+
+    /**
      * Fetches and parses a DID document from the resolver endpoint.
      */
     private DIDDocument resolveToDoc(String did) throws Exception {
