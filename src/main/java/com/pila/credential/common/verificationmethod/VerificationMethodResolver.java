@@ -3,6 +3,8 @@ package com.pila.credential.common.verificationmethod;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.bouncycastle.asn1.x9.X9ECParameters;
 import org.bouncycastle.crypto.ec.CustomNamedCurves;
+import org.bouncycastle.jce.ECNamedCurveTable;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.math.ec.ECPoint;
 
 import java.io.InputStream;
@@ -11,6 +13,8 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyFactory;
+import java.security.Security;
 import java.util.Base64;
 import java.util.Scanner;
 
@@ -21,6 +25,12 @@ public class VerificationMethodResolver {
     private String baseURL;
     private static final ObjectMapper objectMapper = new ObjectMapper();
     private static final int HTTP_TIMEOUT_MS = 10000;
+
+    static {
+        if (Security.getProvider("BC") == null) {
+            Security.addProvider(new BouncyCastleProvider());
+        }
+    }
 
     public VerificationMethodResolver(String baseURL) {
         this.baseURL = baseURL;
@@ -117,6 +127,108 @@ public class VerificationMethodResolver {
         }
 
         throw new Exception("verification method '" + verificationMethodURL + "' not found in DID document");
+    }
+
+    /**
+     * Returns the verification method entry for a DID URL fragment.
+     */
+    public VerificationMethodEntry findVerificationMethod(String verificationMethodURL) throws Exception {
+        String didPart;
+        int hashIndex = verificationMethodURL.indexOf('#');
+        if (hashIndex > 0) {
+            didPart = verificationMethodURL.substring(0, hashIndex);
+        } else {
+            throw new Exception("invalid verification method URL: " + verificationMethodURL);
+        }
+        DIDDocument doc = resolveToDoc(didPart);
+        if (doc.getVerificationMethod() != null) {
+            for (VerificationMethodEntry vm : doc.getVerificationMethod()) {
+                if (verificationMethodURL.equals(vm.getId())) {
+                    return vm;
+                }
+            }
+        }
+        throw new Exception("verification method '" + verificationMethodURL + "' not found in DID document");
+    }
+
+    /**
+     * Resolves the assertionMethod verification method for signing (key-1 by default).
+     */
+    public VerificationMethodEntry resolveAssertionMethod(String issuerDid, String verificationMethodKey)
+            throws Exception {
+        DIDDocument doc = resolveToDoc(issuerDid);
+        String fragment = (verificationMethodKey == null || verificationMethodKey.isBlank()) ? "key-1"
+                : verificationMethodKey;
+        String target = issuerDid + "#" + fragment;
+        if (doc.getVerificationMethod() != null) {
+            for (VerificationMethodEntry vm : doc.getVerificationMethod()) {
+                if (target.equals(vm.getId())) {
+                    return vm;
+                }
+            }
+        }
+        throw new Exception("verification method '" + target + "' not found for issuer " + issuerDid);
+    }
+
+    /**
+     * Builds a BouncyCastle EC public key from a verification method entry.
+     */
+    public java.security.PublicKey ecPublicKeyFromEntry(VerificationMethodEntry vm) throws Exception {
+        if (vm.getPublicKeyJwk() != null) {
+            return jwkToPublicKey(vm.getPublicKeyJwk());
+        }
+        if (vm.getPublicKeyHex() != null && !vm.getPublicKeyHex().isEmpty()) {
+            String hex = vm.getPublicKeyHex().startsWith("0x") ? vm.getPublicKeyHex().substring(2)
+                    : vm.getPublicKeyHex();
+            byte[] pubBytes = hexStringToBytes(hex);
+            X9ECParameters ecParams = CustomNamedCurves.getByName("secp256k1");
+            ECPoint point = ecParams.getCurve().decodePoint(pubBytes);
+            KeyFactory kf = KeyFactory.getInstance("EC", "BC");
+            return kf.generatePublic(new org.bouncycastle.jce.spec.ECPublicKeySpec(point,
+                    ECNamedCurveTable.getParameterSpec("secp256k1")));
+        }
+        throw new Exception("no public key in verification method " + vm.getId());
+    }
+
+    private java.security.PublicKey jwkToPublicKey(JWK jwk) throws Exception {
+        if (!"EC".equals(jwk.getKty())) {
+            throw new Exception("unsupported key type: " + jwk.getKty());
+        }
+        byte[] xBytes = Base64.getUrlDecoder().decode(jwk.getX());
+        byte[] yBytes = Base64.getUrlDecoder().decode(jwk.getY());
+        BigInteger x = new BigInteger(1, xBytes);
+        BigInteger y = new BigInteger(1, yBytes);
+
+        String curveName;
+        if ("secp256k1".equals(jwk.getCrv())) {
+            curveName = "secp256k1";
+        } else if ("P-256".equals(jwk.getCrv())) {
+            curveName = "prime256v1";
+        } else {
+            throw new Exception("unsupported curve: " + jwk.getCrv());
+        }
+
+        X9ECParameters ecParams = CustomNamedCurves.getByName(curveName);
+        if (ecParams == null && "P-256".equals(jwk.getCrv())) {
+            ecParams = CustomNamedCurves.getByName("P-256");
+        }
+        if (ecParams == null) {
+            throw new Exception("curve not found: " + jwk.getCrv());
+        }
+        ECPoint point = ecParams.getCurve().createPoint(x, y);
+        KeyFactory kf = KeyFactory.getInstance("EC", "BC");
+        return kf.generatePublic(new org.bouncycastle.jce.spec.ECPublicKeySpec(point,
+                ECNamedCurveTable.getParameterSpec(curveName)));
+    }
+
+    private static byte[] hexStringToBytes(String hex) {
+        int len = hex.length();
+        byte[] data = new byte[len / 2];
+        for (int i = 0; i < len; i += 2) {
+            data[i / 2] = (byte) ((Character.digit(hex.charAt(i), 16) << 4)
+                    + Character.digit(hex.charAt(i + 1), 16));
+        }
+        return data;
     }
 
     /**

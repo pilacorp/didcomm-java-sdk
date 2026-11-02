@@ -8,6 +8,7 @@ import java.math.BigInteger;
 import java.security.KeyFactory;
 import java.security.PublicKey;
 import java.security.Security;
+import java.security.PublicKey;
 import java.security.Signature;
 import org.bouncycastle.jce.ECNamedCurveTable;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
@@ -100,6 +101,25 @@ public class Crypto {
         } catch (Exception e) {
             System.out.println(e.getMessage());
             e.printStackTrace();
+            return false;
+        }
+    }
+
+    public static boolean verifyEcdsaRaw(java.security.PublicKey publicKey, byte[] digest32, byte[] signature64) {
+        try {
+            if (digest32 == null || digest32.length != 32) {
+                return false;
+            }
+            if (signature64 == null || signature64.length != 64) {
+                return false;
+            }
+            byte[] der = encodeDer(new BigInteger(1, extract(signature64, 0, 32)),
+                    new BigInteger(1, extract(signature64, 32, 32)));
+            Signature verifier = Signature.getInstance("NONEwithECDSA", "BC");
+            verifier.initVerify(publicKey);
+            verifier.update(digest32);
+            return verifier.verify(der);
+        } catch (Exception e) {
             return false;
         }
     }

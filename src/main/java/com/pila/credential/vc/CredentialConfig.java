@@ -4,7 +4,7 @@ package com.pila.credential.vc;
  * Configuration for credential processing.
  */
 public class CredentialConfig {
-    private static String baseURL = "https://auth-dev.pila.vn/api/v1/did";
+    private static String baseURL = "https://api.ndadid.vn/api/v1/did";
 
     /**
      * Initializes the package with a base URL.

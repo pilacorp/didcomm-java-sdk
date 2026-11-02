@@ -1,12 +1,10 @@
 package com.pila.credential.common.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import lombok.Data;
 
 /**
  * Proof represents a Linked Data Proof for a Verifiable Credential.
  */
-@Data
 public class Proof {
     @JsonProperty("type")
     private String type;
@@ -38,6 +36,93 @@ public class Proof {
     @JsonProperty("domain")
     private String domain;
 
-    // For JWT proof
     private byte[] signature;
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
+
+    public String getCreated() {
+        return created;
+    }
+
+    public void setCreated(String created) {
+        this.created = created;
+    }
+
+    public String getVerificationMethod() {
+        return verificationMethod;
+    }
+
+    public void setVerificationMethod(String verificationMethod) {
+        this.verificationMethod = verificationMethod;
+    }
+
+    public String getProofPurpose() {
+        return proofPurpose;
+    }
+
+    public void setProofPurpose(String proofPurpose) {
+        this.proofPurpose = proofPurpose;
+    }
+
+    public String getProofValue() {
+        return proofValue;
+    }
+
+    public void setProofValue(String proofValue) {
+        this.proofValue = proofValue;
+    }
+
+    public String getJws() {
+        return jws;
+    }
+
+    public void setJws(String jws) {
+        this.jws = jws;
+    }
+
+    public String[] getDisclosures() {
+        return disclosures;
+    }
+
+    public void setDisclosures(String[] disclosures) {
+        this.disclosures = disclosures;
+    }
+
+    public String getCryptosuite() {
+        return cryptosuite;
+    }
+
+    public void setCryptosuite(String cryptosuite) {
+        this.cryptosuite = cryptosuite;
+    }
+
+    public String getChallenge() {
+        return challenge;
+    }
+
+    public void setChallenge(String challenge) {
+        this.challenge = challenge;
+    }
+
+    public String getDomain() {
+        return domain;
+    }
+
+    public void setDomain(String domain) {
+        this.domain = domain;
+    }
+
+    public byte[] getSignature() {
+        return signature;
+    }
+
+    public void setSignature(byte[] signature) {
+        this.signature = signature;
+    }
 }

@@ -7,6 +7,11 @@ import com.pila.credential.common.signer.SignerProvider;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import com.pila.credential.common.verificationmethod.VerificationMethodEntry;
+import com.pila.credential.common.verificationmethod.VerificationMethodKeyKind;
+import com.pila.credential.common.verificationmethod.VerificationMethodResolver;
+
+import java.security.PublicKey;
 import java.util.Map;
 
 /**
@@ -74,10 +79,21 @@ public class JSONCredential implements Credential {
         }
 
         String issuer = (String) issuerObj;
-        String verificationMethod = issuer + "#" + this.verificationMethod;
-
         String didBaseURL = CredentialConfig.getBaseURL();
-        ((JSONMap) credentialData).addECDSAProofByProvider(signerProvider, verificationMethod, "assertionMethod", didBaseURL);
+        VerificationMethodResolver resolver = new VerificationMethodResolver(didBaseURL);
+        VerificationMethodEntry vm = resolver.resolveAssertionMethod(issuer, this.verificationMethod);
+        String vmURL = vm.getId();
+        VerificationMethodKeyKind kind = VerificationMethodKeyKind.fromEntry(vm);
+        PublicKey vmPub = resolver.ecPublicKeyFromEntry(vm);
+
+        JSONMap map = (JSONMap) credentialData;
+        if (kind == VerificationMethodKeyKind.SECP256K1) {
+            map.addEcdsaSecp256k1ProofByProvider(signerProvider, vmURL, "assertionMethod", didBaseURL, vmPub);
+        } else if (kind == VerificationMethodKeyKind.P256) {
+            map.addECDSAProofByProvider(signerProvider, vmURL, "assertionMethod", didBaseURL, vmPub);
+        } else {
+            throw new Exception("verification method " + vmURL + " has an unrecognized key type");
+        }
     }
 
     @Override

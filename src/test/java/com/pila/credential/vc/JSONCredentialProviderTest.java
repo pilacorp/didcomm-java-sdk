@@ -50,9 +50,10 @@ public class JSONCredentialProviderTest {
             @SuppressWarnings("unchecked")
             Map<String, Object> proofMap = (Map<String, Object>) proofObj;
 
-            Object proofValue = proofMap.get("proofValue");
-            assertTrue(proofValue instanceof String);
-            assertEquals(128, ((String) proofValue).length());
+            Object jws = proofMap.get("jws");
+            assertTrue(jws instanceof String);
+            assertTrue(((String) jws).contains(".."));
+            assertEquals("EcdsaSecp256k1Signature2019", proofMap.get("type"));
         } finally {
             server.stop(0);
         }
