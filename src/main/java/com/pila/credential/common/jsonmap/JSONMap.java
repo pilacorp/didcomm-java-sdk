@@ -181,9 +181,6 @@ public class JSONMap extends HashMap<String, Object> {
             byte[] hashData = ecdsaHashData(proof);
             byte[] signDigest = sha256(hashData);
             byte[] signature = signerProvider.sign(signDigest);
-            if (signature.length == 65) {
-                signature = Arrays.copyOf(signature, 64);
-            }
             if (signature.length != 64) {
                 throw new IllegalArgumentException(
                         "ecdsa-rdfc-2019 expects a 64-byte P-256 signature (r||s) but got " + signature.length);

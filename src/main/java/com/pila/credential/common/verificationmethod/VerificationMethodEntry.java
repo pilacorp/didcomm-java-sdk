@@ -21,6 +21,9 @@ public class VerificationMethodEntry {
     @JsonProperty("publicKeyJwk")
     private JWK publicKeyJwk;
 
+    @JsonProperty("publicKeyMultibase")
+    private String publicKeyMultibase;
+
     @JsonProperty("revoked")
     private String revoked;
 
@@ -65,6 +68,14 @@ public class VerificationMethodEntry {
 
     public void setPublicKeyJwk(JWK publicKeyJwk) {
         this.publicKeyJwk = publicKeyJwk;
+    }
+
+    public String getPublicKeyMultibase() {
+        return publicKeyMultibase;
+    }
+
+    public void setPublicKeyMultibase(String publicKeyMultibase) {
+        this.publicKeyMultibase = publicKeyMultibase;
     }
 
     public String getRevoked() {

@@ -31,6 +31,9 @@ public final class P256SignerProvider implements SignerProvider {
         }
         String hex = privKeyHex.startsWith("0x") ? privKeyHex.substring(2) : privKeyHex;
         BigInteger d = new BigInteger(1, Hex.decode(hex));
+        if (d.signum() <= 0 || d.compareTo(CURVE_SPEC.getN()) >= 0) {
+            throw new IllegalArgumentException("P-256 private key must satisfy 1 <= d < curve order");
+        }
         KeyFactory kf = KeyFactory.getInstance("EC", "BC");
         this.privateKey = kf.generatePrivate(new ECPrivateKeySpec(d, CURVE_SPEC));
     }

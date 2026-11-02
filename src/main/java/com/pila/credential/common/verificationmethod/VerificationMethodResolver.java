@@ -177,7 +177,14 @@ public class VerificationMethodResolver {
         if (vm.getPublicKeyJwk() != null) {
             return jwkToPublicKey(vm.getPublicKeyJwk());
         }
+        if (vm.getPublicKeyMultibase() != null && !vm.getPublicKeyMultibase().isEmpty()) {
+            return Multikey.publicKeyFromMultibase(vm.getPublicKeyMultibase());
+        }
         if (vm.getPublicKeyHex() != null && !vm.getPublicKeyHex().isEmpty()) {
+            if (VerificationMethodKeyKind.fromEntry(vm) != VerificationMethodKeyKind.SECP256K1) {
+                throw new Exception("publicKeyHex is only valid for secp256k1 verification methods, got type "
+                        + vm.getType());
+            }
             String hex = vm.getPublicKeyHex().startsWith("0x") ? vm.getPublicKeyHex().substring(2)
                     : vm.getPublicKeyHex();
             byte[] pubBytes = hexStringToBytes(hex);
