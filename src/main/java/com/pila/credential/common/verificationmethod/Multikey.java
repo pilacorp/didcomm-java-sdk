@@ -69,6 +69,25 @@ public final class Multikey {
                 ECNamedCurveTable.getParameterSpec("prime256v1")));
     }
 
+    public static String encodeP256PublicXY(byte[] uncompressed64) throws Exception {
+        if (uncompressed64 == null || uncompressed64.length != 64) {
+            throw new Exception("multikey: NewP256MultikeyVM requires a P-256 public key");
+        }
+        byte[] encoded = new byte[65];
+        encoded[0] = 0x04;
+        System.arraycopy(uncompressed64, 0, encoded, 1, 64);
+        X9ECParameters ecParams = CustomNamedCurves.getByName("P-256");
+        if (ecParams == null) {
+            ecParams = CustomNamedCurves.getByName("prime256v1");
+        }
+        ECPoint point = ecParams.getCurve().decodePoint(encoded);
+        byte[] compressed = point.getEncoded(true);
+        byte[] raw = new byte[P256_PUB_MULTICODEC.length + compressed.length];
+        System.arraycopy(P256_PUB_MULTICODEC, 0, raw, 0, P256_PUB_MULTICODEC.length);
+        System.arraycopy(compressed, 0, raw, P256_PUB_MULTICODEC.length, compressed.length);
+        return Multibase.encodeBase58Btc(raw);
+    }
+
     public static String encodeP256PublicKey(PublicKey publicKey) throws Exception {
         if (!(publicKey instanceof org.bouncycastle.jce.interfaces.ECPublicKey ec)) {
             throw new Exception("multikey: expected EC public key");

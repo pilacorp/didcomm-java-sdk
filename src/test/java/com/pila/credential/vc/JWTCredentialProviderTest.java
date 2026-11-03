@@ -118,6 +118,8 @@ public class JWTCredentialProviderTest {
             throws IOException {
         String body = "{"
                 + "\"id\":\"did:example:issuer\","
+                + "\"assertionMethod\":[\"" + verificationMethodId + "\"],"
+                + "\"authentication\":[\"" + verificationMethodId + "\"],"
                 + "\"verificationMethod\":[{"
                 + "\"id\":\"" + verificationMethodId + "\","
                 + "\"publicKeyHex\":\"" + publicKeyHex + "\""

@@ -162,11 +162,17 @@ public class JWTCredential implements Credential {
 
     @Override
     public void addProofByProvider(SignerProvider signerProvider) throws Exception {
+        String didBaseURL = CredentialConfig.getBaseURL();
+        String issuer = issuerDid();
+        com.pila.credential.common.verificationmethod.VerificationMethodResolver resolver =
+                new com.pila.credential.common.verificationmethod.VerificationMethodResolver(didBaseURL);
+        com.pila.credential.common.verificationmethod.ResolveVmUrl.resolveSigningVM(
+                issuer, "assertionMethod", this.verificationMethodKey, resolver);
+
         JWTSigner signer = new JWTSigner(signerProvider);
         String newSignature = signer.signString(signingInput);
 
         // Verify-after-sign (atomic): verify before mutating credential state.
-        String didBaseURL = CredentialConfig.getBaseURL();
         JWTVerifier verifier = new JWTVerifier(didBaseURL);
         verifier.verifyJWT(signingInput + "." + newSignature);
 
@@ -249,5 +255,28 @@ public class JWTCredential implements Credential {
      */
     public void setVerificationMethodKey(String verificationMethodKey) {
         this.verificationMethodKey = verificationMethodKey;
+    }
+
+    private String issuerDid() throws Exception {
+        String[] parts = signingInput.split("\\.");
+        byte[] payloadBytes = Base64.getUrlDecoder().decode(parts[1]);
+        ObjectMapper mapper = new ObjectMapper();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> payload = mapper.readValue(payloadBytes, Map.class);
+        Object iss = payload.get("iss");
+        if (iss instanceof String s && !s.isEmpty()) {
+            return s;
+        }
+        byte[] headerBytes = Base64.getUrlDecoder().decode(parts[0]);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> header = mapper.readValue(headerBytes, Map.class);
+        Object kid = header.get("kid");
+        if (kid instanceof String k) {
+            int hash = k.indexOf('#');
+            if (hash > 0) {
+                return k.substring(0, hash);
+            }
+        }
+        throw new Exception("issuer is missing or invalid");
     }
 }

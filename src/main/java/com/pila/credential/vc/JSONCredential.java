@@ -81,8 +81,10 @@ public class JSONCredential implements Credential {
         String issuer = (String) issuerObj;
         String didBaseURL = CredentialConfig.getBaseURL();
         VerificationMethodResolver resolver = new VerificationMethodResolver(didBaseURL);
-        VerificationMethodEntry vm = resolver.resolveAssertionMethod(issuer, this.verificationMethod);
-        String vmURL = vm.getId();
+        var signing = com.pila.credential.common.verificationmethod.ResolveVmUrl.resolveSigningVM(
+                issuer, "assertionMethod", this.verificationMethod, resolver);
+        VerificationMethodEntry vm = signing.vm();
+        String vmURL = signing.url();
         VerificationMethodKeyKind kind = VerificationMethodKeyKind.fromEntry(vm);
         PublicKey vmPub = resolver.ecPublicKeyFromEntry(vm);
 
