@@ -226,6 +226,17 @@ public class JSONMap extends HashMap<String, Object> {
             String proofPurpose,
             String didBaseURL,
             PublicKey vmPublicKey) throws Exception {
+        addEcdsaSecp256k1ProofByProvider(signerProvider, verificationMethod, proofPurpose, didBaseURL, vmPublicKey,
+                null, null);
+    }
+
+    public void addEcdsaSecp256k1ProofByProvider(SignerProvider signerProvider,
+            String verificationMethod,
+            String proofPurpose,
+            String didBaseURL,
+            PublicKey vmPublicKey,
+            String challenge,
+            String domain) throws Exception {
         if (signerProvider == null) {
             throw new IllegalArgumentException("signerProvider cannot be null");
         }
@@ -238,6 +249,12 @@ public class JSONMap extends HashMap<String, Object> {
             proof.setCreated(Instant.now().toString());
             proof.setVerificationMethod(verificationMethod);
             proof.setProofPurpose(proofPurpose);
+            if (challenge != null && !challenge.isEmpty()) {
+                proof.setChallenge(challenge);
+            }
+            if (domain != null && !domain.isEmpty()) {
+                proof.setDomain(domain);
+            }
 
             String encHeader = JwsDetached.encodeHeader(ALG_ES256K);
             byte[] hashData = ecdsaHashData(proof);
@@ -323,6 +340,12 @@ public class JSONMap extends HashMap<String, Object> {
         if (proofMap.containsKey("jws") && proofMap.get("jws") instanceof String) {
             result.setJws((String) proofMap.get("jws"));
         }
+        if (proofMap.containsKey("challenge") && proofMap.get("challenge") instanceof String) {
+            result.setChallenge((String) proofMap.get("challenge"));
+        }
+        if (proofMap.containsKey("domain") && proofMap.get("domain") instanceof String) {
+            result.setDomain((String) proofMap.get("domain"));
+        }
 
         return result;
     }
@@ -340,6 +363,10 @@ public class JSONMap extends HashMap<String, Object> {
      * Verifies proofs using an injected DID resolver (offline or HTTP).
      */
     public boolean verifyProof(CredentialResolver resolver) throws Exception {
+        return verifyProof(resolver, null);
+    }
+
+    public boolean verifyProof(CredentialResolver resolver, String proofVerificationMethod) throws Exception {
         Object proofObj = this.get("proof");
         if (proofObj == null) {
             throw new Exception("JSONMap has no proof");
@@ -359,11 +386,21 @@ public class JSONMap extends HashMap<String, Object> {
             throw new Exception("JSONMap has no proof");
         }
 
+        boolean matched = proofVerificationMethod == null || proofVerificationMethod.isEmpty();
         for (Object raw : proofs) {
             Proof proof = parseRawToProof(raw);
+            if (proofVerificationMethod != null && !proofVerificationMethod.isEmpty()) {
+                if (!proofVerificationMethod.equals(proof.getVerificationMethod())) {
+                    continue;
+                }
+                matched = true;
+            }
             if (!verifyOneProof(resolver, proof)) {
                 return false;
             }
+        }
+        if (!matched) {
+            throw new Exception("no proof bound to verification method " + proofVerificationMethod);
         }
         return true;
     }

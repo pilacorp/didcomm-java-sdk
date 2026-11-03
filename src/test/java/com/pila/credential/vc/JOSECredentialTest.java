@@ -67,6 +67,12 @@ public class JOSECredentialTest {
             assertInstanceOf(JOSECredential.class, parsed);
             assertEquals("JOSE", parsed.getType());
             parsed.verify();
+
+            JOSECredential viaOpts = JOSECredential.create(contents,
+                    new CredentialOptions().withVerificationMethodKey("key-1"));
+            viaOpts.addProofByProvider(new DefaultSignerProvider(privKeyHex));
+            viaOpts.verify();
+            org.junit.jupiter.api.Assertions.assertThrows(Exception.class, () -> viaOpts.present(List.of()));
         } finally {
             server.stop(0);
         }

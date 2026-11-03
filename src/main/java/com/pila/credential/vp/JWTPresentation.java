@@ -22,6 +22,7 @@ public final class JWTPresentation {
     private String signingInput;
     private PresentationData payloadData;
     private String signature = "";
+    private Map<String, Object> jwtClaims = new HashMap<>();
 
     private JWTPresentation(String signingInput, PresentationData payloadData) {
         this.signingInput = signingInput;
@@ -70,7 +71,9 @@ public final class JWTPresentation {
         Map<String, Object> header = Map.of("typ", "JWT", "alg", "ES256K", "kid", kid);
         String headerEncoded = base64Url(MAPPER.writeValueAsBytes(header));
         String payloadEncoded = base64Url(MAPPER.writeValueAsBytes(payload));
-        return new JWTPresentation(headerEncoded + "." + payloadEncoded, m);
+        JWTPresentation pres = new JWTPresentation(headerEncoded + "." + payloadEncoded, m);
+        pres.jwtClaims = otherClaims;
+        return pres;
     }
 
     public void addProofByProvider(SignerProvider signerProvider) throws Exception {
@@ -86,12 +89,37 @@ public final class JWTPresentation {
     }
 
     public void verify() throws Exception {
+        verify(null);
+    }
+
+    public void verify(PresentationOptions opts) throws Exception {
         if (signature == null || signature.isEmpty()) {
             throw new Exception("presentation has no signature");
         }
         String jws = signingInput + "." + signature;
-        JWTVerifier verifier = new JWTVerifier(CredentialConfig.getBaseURL());
+        String baseURL = CredentialConfig.getBaseURL();
+        if (opts != null && opts.getDidBaseURL() != null && !opts.getDidBaseURL().isEmpty()) {
+            baseURL = opts.getDidBaseURL();
+        }
+        JWTVerifier verifier = new JWTVerifier(baseURL);
         verifier.verifyJWT(jws);
+        if (opts != null) {
+            PresentationAudience.checkChallenge(jwtClaims.get("nonce"), opts.getExpectedChallenge());
+            PresentationAudience.checkAudience(jwtClaims.get("aud"), opts);
+            if (opts.isCheckExpiration()) {
+                PresentationHelper.checkExpiration(payloadData, opts.getClockSkewLeewayMs());
+                Object exp = jwtClaims.get("exp");
+                if (exp instanceof Number n) {
+                    long now = java.time.Instant.now().minusMillis(opts.getClockSkewLeewayMs()).getEpochSecond();
+                    if (now >= n.longValue()) {
+                        throw new Exception("presentation JWT has expired");
+                    }
+                }
+            }
+            if (opts.isValidateVC()) {
+                PresentationHelper.verifyEmbeddedCredentials(payloadData);
+            }
+        }
     }
 
     public String serialize() {
@@ -130,6 +158,8 @@ public final class JWTPresentation {
         if (parts.length == 3) {
             pres.signature = parts[2];
         }
+        payload.remove("vp");
+        pres.jwtClaims = payload;
         return pres;
     }
 }

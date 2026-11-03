@@ -1,7 +1,14 @@
 package com.pila.credential.vp;
 
 import com.pila.credential.common.verificationmethod.CredentialResolver;
+import lombok.Getter;
+import lombok.Setter;
 
+/**
+ * Go {@code PresentationOpt} equivalents: challenge/domain, audience, resolver, VC validation.
+ */
+@Getter
+@Setter
 public class PresentationOptions {
     private boolean verifyProof;
     private boolean validateVC;
@@ -14,92 +21,77 @@ public class PresentationOptions {
     private String expectedDomain;
     private boolean requireAudience;
     private CredentialResolver resolver;
+    private String proofVerificationMethod;
+    private boolean replaceProof;
+    private String didBaseURL;
 
-    public boolean isVerifyProof() {
-        return verifyProof;
+    public PresentationOptions withVerifyProof() {
+        this.verifyProof = true;
+        return this;
     }
 
-    public void setVerifyProof(boolean verifyProof) {
-        this.verifyProof = verifyProof;
+    public PresentationOptions withVCValidation() {
+        this.validateVC = true;
+        return this;
     }
 
-    public boolean isValidateVC() {
-        return validateVC;
+    public PresentationOptions withCheckExpiration() {
+        this.checkExpiration = true;
+        return this;
     }
 
-    public void setValidateVC(boolean validateVC) {
-        this.validateVC = validateVC;
+    public PresentationOptions withLeewayMs(long ms) {
+        this.clockSkewLeewayMs = Math.max(ms, 0);
+        return this;
     }
 
-    public boolean isCheckExpiration() {
-        return checkExpiration;
+    public PresentationOptions withVerificationMethodKey(String key) {
+        this.verificationMethodKey = key;
+        return this;
     }
 
-    public void setCheckExpiration(boolean checkExpiration) {
-        this.checkExpiration = checkExpiration;
-    }
-
-    public long getClockSkewLeewayMs() {
-        return clockSkewLeewayMs;
-    }
-
-    public void setClockSkewLeewayMs(long clockSkewLeewayMs) {
-        this.clockSkewLeewayMs = clockSkewLeewayMs;
-    }
-
-    public String getVerificationMethodKey() {
-        return verificationMethodKey;
-    }
-
-    public void setVerificationMethodKey(String verificationMethodKey) {
-        this.verificationMethodKey = verificationMethodKey;
-    }
-
-    public String getChallenge() {
-        return challenge;
-    }
-
-    public void setChallenge(String challenge) {
+    public PresentationOptions withChallenge(String challenge) {
         this.challenge = challenge;
+        return this;
     }
 
-    public String getDomain() {
-        return domain;
-    }
-
-    public void setDomain(String domain) {
+    public PresentationOptions withDomain(String domain) {
         this.domain = domain;
+        return this;
     }
 
-    public String getExpectedChallenge() {
-        return expectedChallenge;
+    public PresentationOptions withExpectedChallenge(String challenge) {
+        this.expectedChallenge = challenge;
+        return this;
     }
 
-    public void setExpectedChallenge(String expectedChallenge) {
-        this.expectedChallenge = expectedChallenge;
+    public PresentationOptions withExpectedDomain(String domain) {
+        this.expectedDomain = domain;
+        return this;
     }
 
-    public String getExpectedDomain() {
-        return expectedDomain;
+    public PresentationOptions withRequireAudience() {
+        this.requireAudience = true;
+        return this;
     }
 
-    public void setExpectedDomain(String expectedDomain) {
-        this.expectedDomain = expectedDomain;
-    }
-
-    public boolean isRequireAudience() {
-        return requireAudience;
-    }
-
-    public void setRequireAudience(boolean requireAudience) {
-        this.requireAudience = requireAudience;
-    }
-
-    public CredentialResolver getResolver() {
-        return resolver;
-    }
-
-    public void setResolver(CredentialResolver resolver) {
+    public PresentationOptions withResolver(CredentialResolver resolver) {
         this.resolver = resolver;
+        return this;
+    }
+
+    public PresentationOptions withProofVerificationMethod(String vm) {
+        this.proofVerificationMethod = vm;
+        return this;
+    }
+
+    public PresentationOptions withReplaceProof() {
+        this.replaceProof = true;
+        return this;
+    }
+
+    public PresentationOptions withBaseURL(String baseURL) {
+        this.didBaseURL = baseURL;
+        return this;
     }
 }

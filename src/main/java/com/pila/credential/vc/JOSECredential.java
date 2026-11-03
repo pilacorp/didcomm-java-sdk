@@ -18,6 +18,7 @@ import com.pila.credential.common.verificationmethod.ResolveVmUrl;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.HexFormat;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -73,17 +74,19 @@ public class JOSECredential implements Credential {
     }
 
     public static JOSECredential create(CredentialContents vcc) throws Exception {
-        return create(vcc, null, null, null, null, null, null);
+        return create(vcc, new CredentialOptions());
     }
 
-    public static JOSECredential create(
-            CredentialContents vcc,
-            List<String> sdSelectivePaths,
-            String sdAlg,
-            Boolean sdShuffle,
-            List<BuildDisclosuresInput.DecoyConfig> sdDecoys,
-            List<String> sdDisclosures,
-            String verificationMethodKey) throws Exception {
+    public static JOSECredential create(CredentialContents vcc, CredentialOptions opts) throws Exception {
+        if (opts == null) {
+            opts = new CredentialOptions();
+        }
+        List<String> sdSelectivePaths = opts.getSdSelectivePaths();
+        String sdAlg = opts.getSdAlg() == null || opts.getSdAlg().isEmpty() ? null : opts.getSdAlg();
+        Boolean sdShuffle = opts.isSdShuffle();
+        List<BuildDisclosuresInput.DecoyConfig> sdDecoys = opts.getSdDecoys();
+        List<String> sdDisclosures = opts.getSdDisclosures();
+        String verificationMethodKey = opts.getVerificationMethodKey();
         if (vcc == null) {
             throw new IllegalArgumentException("credential contents is nil");
         }
@@ -115,9 +118,16 @@ public class JOSECredential implements Credential {
         if (vcc.getIssuer() == null || vcc.getIssuer().isEmpty()) {
             throw new Exception("issuer is required to resolve VM");
         }
-        String vmKey = verificationMethodKey != null ? verificationMethodKey : DEFAULT_VERIFICATION_METHOD_KEY;
+        String vmKey = verificationMethodKey != null && !verificationMethodKey.isEmpty()
+                ? verificationMethodKey
+                : DEFAULT_VERIFICATION_METHOD_KEY;
+        var resolver = opts.getResolver() != null
+                ? opts.getResolver()
+                : (opts.getDidBaseURL() != null && !opts.getDidBaseURL().isEmpty()
+                        ? CredentialConfig.resolverFor(opts.getDidBaseURL())
+                        : CredentialConfig.getDocumentResolver());
         var signing = ResolveVmUrl.resolveSigningVM(
-                vcc.getIssuer(), "assertionMethod", vmKey, CredentialConfig.getDocumentResolver());
+                vcc.getIssuer(), "assertionMethod", vmKey, resolver);
 
         boolean disclosable = vcMap.containsKey("_sd_alg");
         Map<String, Object> header = new HashMap<>();
@@ -133,6 +143,15 @@ public class JOSECredential implements Credential {
         cred.payloadData = new CredentialData(vcMap);
         cred.disclosures = disclosures;
         cred.verificationMethodKey = vmKey;
+        return cred;
+    }
+
+    public static JOSECredential parse(String rawJWT, CredentialOptions opts) throws Exception {
+        JOSECredential cred = parse(rawJWT);
+        if (opts != null && (opts.isVerifyProof() || opts.isCheckExpiration() || opts.isValidateSchema()
+                || opts.isCheckRevocation())) {
+            cred.executeOptions(opts);
+        }
         return cred;
     }
 
@@ -193,8 +212,18 @@ public class JOSECredential implements Credential {
 
     @Override
     public void addProofByProvider(SignerProvider signerProvider) throws Exception {
+        addProofByProvider(signerProvider, null);
+    }
+
+    public void addProofByProvider(SignerProvider signerProvider, CredentialOptions opts) throws Exception {
         if (signerProvider == null) {
             throw new IllegalArgumentException("signer provider cannot be null");
+        }
+        if (signerProvider instanceof com.pila.credential.common.signer.P256SignerProvider) {
+            String[] parts = signingInput.split("\\.");
+            Map<String, Object> header = decodeJson(parts[0]);
+            header.put("alg", "ES256");
+            signingInput = encodeJson(header) + "." + parts[1];
         }
         JWTSigner signer = new JWTSigner(signerProvider);
         String newSignature = signer.signString(signingInput);
@@ -203,6 +232,9 @@ public class JOSECredential implements Credential {
         verifier.verifyJWT(signingInput + "." + newSignature);
 
         this.signature = newSignature;
+        if (opts != null) {
+            executeOptions(opts);
+        }
     }
 
     @Override
@@ -278,6 +310,59 @@ public class JOSECredential implements Credential {
     public boolean isDisclosable() {
         String typ = peekJwtTyp(signingInput);
         return TYPE_VC_SD_JWT.equals(typ) || ("application/" + TYPE_VC_SD_JWT).equals(typ);
+    }
+
+    public JOSECredential present(List<String> selectedDisclosures) throws Exception {
+        if (signature == null || signature.isEmpty()) {
+            throw new Exception("cannot present an unsigned credential");
+        }
+        if (!isDisclosable()) {
+            throw new Exception("credential carries no disclosures; nothing to present selectively");
+        }
+        String issuerJWT = signingInput + "." + signature;
+        return parse(SDJWT.buildSDJWTPresentation(issuerJWT, selectedDisclosures));
+    }
+
+    public String hash() throws Exception {
+        if (signature == null || signature.isEmpty()) {
+            throw new Exception("credential must be signed before hashing");
+        }
+        Object serialized = serialize();
+        if (!(serialized instanceof String s)) {
+            throw new Exception("unexpected serialized credential type");
+        }
+        byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+                .digest(s.getBytes(StandardCharsets.UTF_8));
+        return HexFormat.of().formatHex(digest);
+    }
+
+    public void executeOptions(CredentialOptions opts) throws Exception {
+        if (opts == null) {
+            return;
+        }
+        if (opts.isValidateSchema()) {
+            try {
+                CredentialHelper.validateCredential(payloadData);
+            } catch (UnsupportedOperationException ignored) {
+                // Schema validation is not implemented in this SDK yet.
+            }
+        }
+        if (opts.isVerifyProof()) {
+            JWTVerifier verifier = new JWTVerifier(
+                    opts.getDidBaseURL() != null && !opts.getDidBaseURL().isEmpty()
+                            ? opts.getDidBaseURL()
+                            : CredentialConfig.getBaseURL());
+            verifier.verifyJWT(signingInput + "." + signature);
+        }
+        if (opts.isCheckExpiration()) {
+            Object until = payloadData.get("validUntil");
+            if (until instanceof String s) {
+                java.time.Instant expiry = java.time.Instant.parse(s);
+                if (!java.time.Instant.now().minusMillis(opts.getClockSkewLeewayMs()).isBefore(expiry)) {
+                    throw new Exception("credential has expired");
+                }
+            }
+        }
     }
 
     private static void requireJOSECredential(Map<String, Object> m) throws Exception {

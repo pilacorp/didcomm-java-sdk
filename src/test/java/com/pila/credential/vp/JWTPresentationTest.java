@@ -39,9 +39,15 @@ class JWTPresentationTest {
             pc.setHolder(holder);
             pc.setValidFrom(Instant.now());
 
-            JWTPresentation pres = JWTPresentation.create(pc, null);
+            JWTPresentation pres = JWTPresentation.create(pc,
+                    new PresentationOptions().withChallenge("n1").withDomain("https://verifier.example"));
             pres.addProofByProvider(new DefaultSignerProvider(priv));
-            assertDoesNotThrow(pres::verify);
+            assertDoesNotThrow(() -> pres.verify());
+            assertDoesNotThrow(() -> pres.verify(new PresentationOptions()
+                    .withExpectedChallenge("n1")
+                    .withExpectedDomain("https://verifier.example")));
+            org.junit.jupiter.api.Assertions.assertThrows(Exception.class,
+                    () -> pres.verify(new PresentationOptions().withExpectedDomain("https://other.example")));
         } finally {
             server.stop(0);
         }

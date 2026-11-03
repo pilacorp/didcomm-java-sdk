@@ -46,6 +46,12 @@ public class VCUtil {
             if (proof.getCryptosuite() != null && !proof.getCryptosuite().isEmpty()) {
                 proofMap.put("cryptosuite", proof.getCryptosuite());
             }
+            if (proof.getChallenge() != null && !proof.getChallenge().isEmpty()) {
+                proofMap.put("challenge", proof.getChallenge());
+            }
+            if (proof.getDomain() != null && !proof.getDomain().isEmpty()) {
+                proofMap.put("domain", proof.getDomain());
+            }
             result.add(proofMap);
         }
 

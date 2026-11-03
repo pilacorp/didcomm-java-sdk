@@ -99,9 +99,13 @@ public class JSONPresentation {
         PublicKey vmPub = resolver.ecPublicKeyFromEntry(vm);
         String didBaseURL = CredentialConfig.getBaseURL();
 
+        if (presentationData.get("proof") != null && !options.isReplaceProof()) {
+            throw new Exception("presentation already has a proof; pass WithReplaceProof to replace it");
+        }
         if (kind == VerificationMethodKeyKind.SECP256K1) {
             presentationData.addEcdsaSecp256k1ProofByProvider(
-                    signerProvider, vmURL, "authentication", didBaseURL, vmPub);
+                    signerProvider, vmURL, "authentication", didBaseURL, vmPub,
+                    options.getChallenge(), options.getDomain());
         } else if (kind == VerificationMethodKeyKind.P256) {
             presentationData.addECDSAProofByProvider(
                     signerProvider,
@@ -168,16 +172,21 @@ public class JSONPresentation {
             return;
         }
         if (opts.isValidateVC()) {
-            // Minimal: embedded credentials were verified at build time in PresentationHelper.
+            PresentationHelper.verifyEmbeddedCredentials(presentationData);
         }
         if (opts.isVerifyProof()) {
             CredentialResolver resolver = opts.getResolver() != null
                     ? opts.getResolver()
-                    : CredentialConfig.getDocumentResolver();
-            boolean ok = presentationData.verifyProof(resolver);
+                    : (opts.getDidBaseURL() != null && !opts.getDidBaseURL().isEmpty()
+                            ? CredentialConfig.resolverFor(opts.getDidBaseURL())
+                            : CredentialConfig.getDocumentResolver());
+            boolean ok = presentationData.verifyProof(resolver, opts.getProofVerificationMethod());
             if (!ok) {
                 throw new Exception("invalid proof");
             }
+        }
+        if (opts.isCheckExpiration()) {
+            PresentationHelper.checkExpiration(presentationData, opts.getClockSkewLeewayMs());
         }
         if (opts.getExpectedChallenge() != null
                 || opts.getExpectedDomain() != null

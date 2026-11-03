@@ -60,6 +60,17 @@ public class JSONPresentationTest {
             byte[] raw = pres.getContents();
             JSONPresentation parsed = JSONPresentation.parse(raw);
             parsed.verify();
+
+            JSONPresentation bound = JSONPresentation.create(vpc);
+            bound.addProofByProvider(new DefaultSignerProvider(privKeyHex),
+                    new PresentationOptions().withChallenge("n1").withDomain("https://verifier.example"));
+            bound.verify(new PresentationOptions()
+                    .withExpectedChallenge("n1")
+                    .withExpectedDomain("https://verifier.example"));
+            org.junit.jupiter.api.Assertions.assertThrows(Exception.class,
+                    () -> bound.verify(new PresentationOptions().withExpectedChallenge("wrong")));
+            org.junit.jupiter.api.Assertions.assertThrows(Exception.class,
+                    () -> bound.addProofByProvider(new DefaultSignerProvider(privKeyHex)));
         } finally {
             server.stop(0);
         }

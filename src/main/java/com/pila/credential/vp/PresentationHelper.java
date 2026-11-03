@@ -60,4 +60,34 @@ public final class PresentationHelper {
         }
         return vpJSON;
     }
+
+    public static void verifyEmbeddedCredentials(PresentationData data) throws Exception {
+        Object raw = data.get("verifiableCredential");
+        if (!(raw instanceof List<?> list)) {
+            return;
+        }
+        for (int i = 0; i < list.size(); i++) {
+            Object item = list.get(i);
+            byte[] bytes;
+            if (item instanceof String s) {
+                bytes = s.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            } else {
+                bytes = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(item);
+            }
+            com.pila.credential.vc.Credential parsed = com.pila.credential.vc.CredentialParser.parseCredential(bytes);
+            parsed.verify();
+        }
+    }
+
+    public static void checkExpiration(PresentationData data, long leewayMs) throws Exception {
+        Object until = data.get("validUntil");
+        if (!(until instanceof String s) || s.isEmpty()) {
+            return;
+        }
+        java.time.Instant expiry = java.time.Instant.parse(s);
+        java.time.Instant now = java.time.Instant.now().minusMillis(Math.max(leewayMs, 0));
+        if (!now.isBefore(expiry)) {
+            throw new Exception("presentation has expired");
+        }
+    }
 }
