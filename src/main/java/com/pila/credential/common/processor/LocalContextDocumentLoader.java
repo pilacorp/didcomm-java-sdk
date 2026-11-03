@@ -37,7 +37,9 @@ public final class LocalContextDocumentLoader implements DocumentLoader {
             "https://www.w3.org/ns/credentials/v2.jsonld", CLASSPATH_PREFIX + "w3c.credential.v2.json",
             "https://www.w3.org/ns/credentials/examples/v2", CLASSPATH_PREFIX + "w3c.credential.examples.v2.json",
             "https://www.w3.org/ns/credentials/examples/v2.jsonld", CLASSPATH_PREFIX + "w3c.credential.examples.v2.json",
-            "https://w3id.org/security/data-integrity/v2", CLASSPATH_PREFIX + "w3c.security.data-integrity.v2.json"
+            "https://w3id.org/security/data-integrity/v2", CLASSPATH_PREFIX + "w3c.security.data-integrity.v2.json",
+            "https://w3id.org/citizenship/v4rc1", CLASSPATH_PREFIX + "w3c.citizenship.v4rc1.json",
+            "https://w3id.org/citizenship/v4rc1.jsonld", CLASSPATH_PREFIX + "w3c.citizenship.v4rc1.json"
     );
 
     private final DocumentLoader fallback;

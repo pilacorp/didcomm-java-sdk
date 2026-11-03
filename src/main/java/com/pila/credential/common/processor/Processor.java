@@ -121,4 +121,31 @@ public class Processor {
         result.put("@type", type);
         return result;
     }
+
+    /** ecdsa-sd-2023 canonical N-Quads with blank-node id map (URDNA2015). */
+    public static JsonLdSdProcessor.CanonicalizeResult canonicalizeWithIdMap(Map<String, Object> doc) throws Exception {
+        return JsonLdSdProcessor.canonicalizeWithIdMap(doc);
+    }
+
+    /** ecdsa-sd-2023 canonical bytes (native JSON types, SafeMode). */
+    public static byte[] canonicalizeForSd(Map<String, Object> doc) throws Exception {
+        return JsonLdSdProcessor.canonicalize(doc);
+    }
+
+    public static JsonLdSdProcessor.CanonicalizeResult canonicalizeNQuadsWithIdMap(List<String> nquads)
+            throws Exception {
+        return JsonLdSdProcessor.canonicalizeNQuadsWithIdMap(nquads);
+    }
+
+    public static List<Object> expandJsonLd(Map<String, Object> doc) throws Exception {
+        return JsonLdSdProcessor.expandJsonLd(doc);
+    }
+
+    public static Map<String, Object> compactJsonLd(List<Object> expanded, Object context) throws Exception {
+        return JsonLdSdProcessor.compactJsonLd(expanded, context);
+    }
+
+    public static List<String> toRdfNQuads(Object doc) throws Exception {
+        return JsonLdSdProcessor.toRdfNQuads(doc);
+    }
 }

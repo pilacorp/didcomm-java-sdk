@@ -9,7 +9,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import com.pila.credential.common.verificationmethod.VerificationMethodEntry;
 import com.pila.credential.common.verificationmethod.VerificationMethodKeyKind;
-import com.pila.credential.common.verificationmethod.VerificationMethodResolver;
+import com.pila.credential.common.verificationmethod.CredentialResolver;
 
 import java.security.PublicKey;
 import java.util.Map;
@@ -79,8 +79,7 @@ public class JSONCredential implements Credential {
         }
 
         String issuer = (String) issuerObj;
-        String didBaseURL = CredentialConfig.getBaseURL();
-        VerificationMethodResolver resolver = new VerificationMethodResolver(didBaseURL);
+        CredentialResolver resolver = CredentialConfig.getDocumentResolver();
         var signing = com.pila.credential.common.verificationmethod.ResolveVmUrl.resolveSigningVM(
                 issuer, "assertionMethod", this.verificationMethod, resolver);
         VerificationMethodEntry vm = signing.vm();
@@ -89,6 +88,7 @@ public class JSONCredential implements Credential {
         PublicKey vmPub = resolver.ecPublicKeyFromEntry(vm);
 
         JSONMap map = (JSONMap) credentialData;
+        String didBaseURL = CredentialConfig.getBaseURL();
         if (kind == VerificationMethodKeyKind.SECP256K1) {
             map.addEcdsaSecp256k1ProofByProvider(signerProvider, vmURL, "assertionMethod", didBaseURL, vmPub);
         } else if (kind == VerificationMethodKeyKind.P256) {
@@ -125,8 +125,7 @@ public class JSONCredential implements Credential {
             throw new Exception("credential has no proof");
         }
 
-        String didBaseURL = CredentialConfig.getBaseURL();
-        boolean isValid = ((JSONMap) credentialData).verifyProof(didBaseURL);
+        boolean isValid = ((JSONMap) credentialData).verifyProof(CredentialConfig.getDocumentResolver());
 
         if (!isValid) {
             throw new Exception("invalid proof");

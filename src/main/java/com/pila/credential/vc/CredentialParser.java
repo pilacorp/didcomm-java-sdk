@@ -2,6 +2,7 @@ package com.pila.credential.vc;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pila.credential.common.sdjwt.SDJWT;
 
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -66,13 +67,23 @@ public class CredentialParser {
             return JSONCredential.parseJSONCredential(rawCredential);
         }
 
-        // Try as JWT string
-        String valStr = new String(rawCredential);
-        if (isJWTCredential(valStr)) {
-            return JWTCredential.parseJWTCredential(valStr);
+        String valStr = new String(rawCredential).trim();
+        if (SDJWT.isSDJWT(valStr) || isJWTCredential(valStr)) {
+            String typ = JOSECredential.peekJwtTyp(valStr);
+            if (typ != null && typ.endsWith("+sd-jwt") && !JOSECredential.isJOSECredentialTyp(typ)) {
+                throw new Exception(
+                        "failed to parse credential: unsupported SD-JWT typ \""
+                                + typ + "\": only vc+sd-jwt is read");
+            }
+            if (JOSECredential.isJOSECredentialTyp(typ)) {
+                return JOSECredential.parse(valStr);
+            }
+            if (isJWTCredential(valStr)) {
+                return JWTCredential.parseJWTCredential(valStr);
+            }
         }
 
-        throw new Exception("failed to parse credential: not a valid JWT or embedded credential");
+        throw new Exception("failed to parse credential: not a valid JSON, SD-JWT, or JWT credential");
     }
 
     /**

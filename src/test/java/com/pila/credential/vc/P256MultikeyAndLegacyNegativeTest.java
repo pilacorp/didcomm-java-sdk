@@ -3,6 +3,7 @@ package com.pila.credential.vc;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pila.credential.common.jsonmap.JSONMap;
 import com.pila.credential.common.signer.P256SignerProvider;
+import com.pila.credential.common.signer.SignerProvider;
 import com.pila.credential.common.verificationmethod.Multikey;
 import com.pila.credential.common.verificationmethod.VerificationMethodEntry;
 import com.pila.credential.common.verificationmethod.VerificationMethodKeyKind;
@@ -25,6 +26,7 @@ import java.security.Security;
 import java.util.Map;
 import java.util.concurrent.Executors;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -179,6 +181,50 @@ public class P256MultikeyAndLegacyNegativeTest {
                     throw new Exception("proof verification failed");
                 }
             });
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void legacyHex_rejectsWrongProofConfiguration() throws Exception {
+        HttpServer server = startHexResolver("did:example:legacy-issuer", "did:example:legacy-issuer#key-1", LEGACY_PUB);
+        try {
+            CredentialConfig.init("http://127.0.0.1:" + server.getAddress().getPort());
+            ObjectMapper mapper = new ObjectMapper();
+            JSONMap map = mapper.readValue(LEGACY_HEX_VC, JSONMap.class);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> proof = (Map<String, Object>) map.get("proof");
+            proof.put("created", "2099-01-01T00:00:00Z");
+            // Legacy hex proofValue signs the document body only, not proof options.
+            assertTrue(map.verifyProof(CredentialConfig.getBaseURL()));
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void modernRdfc_rejects65ByteSignatureFromSigner() throws Exception {
+        KeyPair kp = generateP256();
+        String mb = Multikey.encodeP256PublicKey(kp.getPublic());
+        BigInteger d = ((org.bouncycastle.jce.interfaces.ECPrivateKey) kp.getPrivate()).getD();
+        String privHex = toFixed32Hex(d);
+        String did = "did:example:p256-issuer";
+        String vmId = did + "#key-1";
+        HttpServer server = startMultikeyResolver(did, vmId, mb);
+        try {
+            CredentialConfig.init("http://127.0.0.1:" + server.getAddress().getPort());
+            CredentialContents contents = new CredentialContents();
+            contents.setIssuer(did);
+            JSONCredential cred = JSONCredential.newJSONCredential(contents);
+            assertThrows(Exception.class, () -> cred.addProofByProvider(new SignerProvider() {
+                @Override
+                public byte[] sign(byte[] digest) {
+                    byte[] sig = new byte[65];
+                    java.util.Arrays.fill(sig, (byte) 1);
+                    return sig;
+                }
+            }));
         } finally {
             server.stop(0);
         }
