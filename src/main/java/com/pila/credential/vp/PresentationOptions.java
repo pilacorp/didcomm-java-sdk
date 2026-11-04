@@ -60,18 +60,25 @@ public class PresentationOptions {
         return this;
     }
 
+    // The expected-value and audience checks are only meaningful against a
+    // signature-verified proof, so each of these enables proof verification
+    // (go-credential-sdk parity). Otherwise a caller could "check" a challenge
+    // on a proof whose signature was never validated.
     public PresentationOptions withExpectedChallenge(String challenge) {
         this.expectedChallenge = challenge;
+        this.verifyProof = true;
         return this;
     }
 
     public PresentationOptions withExpectedDomain(String domain) {
         this.expectedDomain = domain;
+        this.verifyProof = true;
         return this;
     }
 
     public PresentationOptions withRequireAudience() {
         this.requireAudience = true;
+        this.verifyProof = true;
         return this;
     }
 

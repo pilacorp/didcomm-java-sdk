@@ -184,36 +184,58 @@ public class JSONPresentation {
             if (!ok) {
                 throw new Exception("invalid proof");
             }
+            // Only meaningful against the proofs VerifyProof just validated: a
+            // challenge/domain that is not bound to a verified signature proves
+            // nothing about who the presentation was made for.
+            checkChallengeAndDomain(opts);
         }
         if (opts.isCheckExpiration()) {
             PresentationHelper.checkExpiration(presentationData, opts.getClockSkewLeewayMs());
         }
-        if (opts.getExpectedChallenge() != null
-                || opts.getExpectedDomain() != null
-                || opts.isRequireAudience()) {
-            Object raw = presentationData.get("proof");
-            Proof proof = extractFirstProof(raw);
-            PresentationAudience.checkChallenge(proof != null ? proof.getChallenge() : null,
-                    opts.getExpectedChallenge());
-            PresentationAudience.checkAudience(proof != null ? proof.getDomain() : null, opts);
+    }
+
+    // Enforces expectedChallenge / expectedDomain on EVERY verified proof (or only
+    // the proofVerificationMethod one), so a replayed proof cannot hide among
+    // others. Mirrors go-credential-sdk JSONPresentation.checkChallengeAndDomain.
+    private void checkChallengeAndDomain(PresentationOptions opts) throws Exception {
+        String expChallenge = opts.getExpectedChallenge();
+        String expDomain = opts.getExpectedDomain();
+        if (opts.isRequireAudience() && (expDomain == null || expDomain.isEmpty())) {
+            throw new Exception("WithRequireAudience needs WithExpectedDomain");
+        }
+        boolean hasChallenge = expChallenge != null && !expChallenge.isEmpty();
+        boolean hasDomain = expDomain != null && !expDomain.isEmpty();
+        if (!hasChallenge && !hasDomain) {
+            return;
+        }
+        String only = opts.getProofVerificationMethod();
+        for (Proof p : allProofs()) {
+            if (only != null && !only.isEmpty() && !only.equals(p.getVerificationMethod())) {
+                continue;
+            }
+            if (hasChallenge && !expChallenge.equals(p.getChallenge())) {
+                throw new Exception("proof (" + p.getVerificationMethod() + "): challenge " + p.getChallenge()
+                        + " does not match expected " + expChallenge);
+            }
+            if (hasDomain && !PresentationAudience.audContains(p.getDomain(), expDomain)) {
+                throw new Exception("proof (" + p.getVerificationMethod() + "): domain " + p.getDomain()
+                        + " does not match expected " + expDomain);
+            }
         }
     }
 
-    @SuppressWarnings("unchecked")
-    private static Proof extractFirstProof(Object raw) {
-        if (raw == null) {
-            return null;
-        }
+    private java.util.List<Proof> allProofs() {
+        java.util.List<Proof> proofs = new java.util.ArrayList<>();
+        Object raw = presentationData.get("proof");
         if (raw instanceof Map<?, ?> map) {
-            return MAPPER.convertValue(map, Proof.class);
-        }
-        if (raw instanceof Iterable<?> list) {
+            proofs.add(MAPPER.convertValue(map, Proof.class));
+        } else if (raw instanceof Iterable<?> list) {
             for (Object item : list) {
                 if (item instanceof Map<?, ?>) {
-                    return MAPPER.convertValue(item, Proof.class);
+                    proofs.add(MAPPER.convertValue(item, Proof.class));
                 }
             }
         }
-        return null;
+        return proofs;
     }
 }

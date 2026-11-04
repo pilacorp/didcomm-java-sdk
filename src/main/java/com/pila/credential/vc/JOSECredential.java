@@ -228,7 +228,10 @@ public class JOSECredential implements Credential {
         JWTSigner signer = new JWTSigner(signerProvider);
         String newSignature = signer.signString(signingInput);
 
-        JWTVerifier verifier = new JWTVerifier(CredentialConfig.getBaseURL());
+        var selfResolver = opts != null && opts.getResolver() != null
+                ? opts.getResolver()
+                : CredentialConfig.getDocumentResolver();
+        JWTVerifier verifier = new JWTVerifier(selfResolver);
         verifier.verifyJWT(signingInput + "." + newSignature);
 
         this.signature = newSignature;
@@ -264,7 +267,7 @@ public class JOSECredential implements Credential {
         if (signature == null || signature.isEmpty()) {
             throw new Exception("credential has no signature");
         }
-        JWTVerifier verifier = new JWTVerifier(CredentialConfig.getBaseURL());
+        JWTVerifier verifier = new JWTVerifier(CredentialConfig.getDocumentResolver());
         verifier.verifyJWT(signingInput + "." + signature);
     }
 
@@ -348,10 +351,12 @@ public class JOSECredential implements Credential {
             }
         }
         if (opts.isVerifyProof()) {
-            JWTVerifier verifier = new JWTVerifier(
-                    opts.getDidBaseURL() != null && !opts.getDidBaseURL().isEmpty()
-                            ? opts.getDidBaseURL()
-                            : CredentialConfig.getBaseURL());
+            var resolver = opts.getResolver() != null
+                    ? opts.getResolver()
+                    : (opts.getDidBaseURL() != null && !opts.getDidBaseURL().isEmpty()
+                            ? CredentialConfig.resolverFor(opts.getDidBaseURL())
+                            : CredentialConfig.getDocumentResolver());
+            JWTVerifier verifier = new JWTVerifier(resolver);
             verifier.verifyJWT(signingInput + "." + signature);
         }
         if (opts.isCheckExpiration()) {

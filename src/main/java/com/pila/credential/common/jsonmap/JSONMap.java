@@ -628,7 +628,13 @@ public class JSONMap extends HashMap<String, Object> {
 
     byte[] documentDigest() throws Exception {
         Map<String, Object> body = bodyWithoutProof();
-        byte[] canonical = Processor.canonicalizeDocument(body);
+        // New proofs (ecdsa-rdfc-2019, EcdsaSecp256k1Signature2019 JWS) canonicalize
+        // with the library canonicalizer (native JSON types, SafeMode), matching
+        // go-credential-sdk. The legacy "compatible" canonicalizer (numbers ->
+        // xsd:string) is used only to verify pre-existing hex proofs; see
+        // legacyDocumentDigest()/canonicalize(). Signing a numeric claim with the
+        // compatible canonicalizer would not interoperate with Go.
+        byte[] canonical = Processor.canonicalizeDocumentNativeTypes(body);
         return Processor.computeDigest(canonical);
     }
 
@@ -646,7 +652,8 @@ public class JSONMap extends HashMap<String, Object> {
             throw new IllegalArgumentException("document digest must be 32 bytes");
         }
         Map<String, Object> cfg = ecdsaProofConfig(proof);
-        byte[] cfgCanonical = Processor.canonicalizeDocument(cfg);
+        // Proof config shares the document's canonicalizer: library for new proofs.
+        byte[] cfgCanonical = Processor.canonicalizeDocumentNativeTypes(cfg);
         byte[] cfgHash = Processor.computeDigest(cfgCanonical);
         byte[] hashData = new byte[64];
         System.arraycopy(cfgHash, 0, hashData, 0, 32);

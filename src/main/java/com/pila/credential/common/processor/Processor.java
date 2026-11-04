@@ -27,9 +27,27 @@ public class Processor {
         if (doc == null) {
             throw new IllegalArgumentException("failed to canonicalize document: document is nil");
         }
+        // "Compatible" canonicalizer: numbers/booleans are coerced to typed string
+        // literals. Used ONLY to verify pre-existing legacy hex proofs (SDK <= v1.7.0).
+        return canonicalizeStandardized(standardizeToJSONLD(doc));
+    }
 
-        Map<String, Object> standardizedDoc = standardizeToJSONLD(doc);
+    /**
+     * "Library" canonicalizer: native JSON number/boolean types are preserved, matching
+     * go-credential-sdk's {@code Canonicalize}. Used to sign and verify new proofs
+     * (ecdsa-rdfc-2019, EcdsaSecp256k1Signature2019). Shares the lenient JSON-LD options
+     * of {@link #canonicalizeDocument} so Go-issued terms that expand to relative IRIs are
+     * kept rather than dropped. A numeric claim signed with the compatible canonicalizer
+     * would not interoperate with Go.
+     */
+    public static byte[] canonicalizeDocumentNativeTypes(Map<String, Object> doc) throws Exception {
+        if (doc == null) {
+            throw new IllegalArgumentException("failed to canonicalize document: document is nil");
+        }
+        return canonicalizeStandardized(JsonLdSdProcessor.preserveNativeTypes(doc));
+    }
 
+    private static byte[] canonicalizeStandardized(Map<String, Object> standardizedDoc) throws Exception {
         String json = new ObjectMapper().writeValueAsString(standardizedDoc);
 
         JsonStructure jsonStructure;
