@@ -1,71 +1,34 @@
 package com.pila.credential.vc;
 
-import com.pila.credential.common.dto.Proof;
-import com.pila.credential.common.signer.SignerProvider;
-
 /**
- * Credential interface for verifiable credentials.
+ * Consumer-facing credential contract: read, verify and output (Go {@code vc.Credential}). Signing lives on
+ * {@link SignableCredential}; selective disclosure on {@link JOSECredential}.
  */
 public interface Credential {
-    /**
-     * Adds a proof to the credential using a private key.
-     * 
-     * @param privKeyHex The private key in hex format
-     * @throws Exception if proof addition fails
-     */
-    void addProof(String privKeyHex) throws Exception;
+    /** Verifies the proof/signature with default options. */
+    default void verify() throws Exception {
+        verify(null);
+    }
 
-    /**
-     * Adds a proof to the credential using a signing provider (Vault/HSM/local).
-     *
-     * @param signerProvider The provider used to sign 32-byte SHA-256 digests produced by the SDK
-     * @throws Exception if proof addition fails
-     */
-    void addProofByProvider(SignerProvider signerProvider) throws Exception;
-
-    /**
-     * Gets the signing input (canonicalized data) for the credential.
-     * 
-     * @return The signing input bytes
-     * @throws Exception if getting signing input fails
-     */
-    byte[] getSigningInput() throws Exception;
-
-    /**
-     * Adds a custom proof to the credential.
-     * 
-     * @param proof The proof object to add
-     * @throws Exception if proof addition fails
-     */
-    void addCustomProof(Proof proof) throws Exception;
-
-    /**
-     * Verifies the credential proof.
-     * 
-     * @throws Exception if verification fails
-     */
-    void verify() throws Exception;
+    /** Verifies the proof/signature; {@code opts} adds schema, revocation, expiration, resolver, proof-VM. */
+    void verify(CredentialOptions opts) throws Exception;
 
     /**
      * Serializes the credential to its native format.
-     * 
-     * @return The serialized credential (Map for JSON, String for JWT)
-     * @throws Exception if serialization fails
+     *
+     * @return a Map (JSON-LD) or the token String (JWT / JOSE)
      */
     Object serialize() throws Exception;
 
-    /**
-     * Gets the credential contents as JSON bytes.
-     * 
-     * @return The credential contents as JSON bytes
-     * @throws Exception if getting contents fails
-     */
+    /** SHA-256 (hex) identity of the full credential including proof/signature. */
+    String hash() throws Exception;
+
+    /** The credential contents as JSON bytes. */
     byte[] getContents() throws Exception;
 
-    /**
-     * Gets the credential type.
-     * 
-     * @return The credential type ("JSON" or "JWT")
-     */
+    /** "JSON", "JWT" or "JOSE". */
     String getType();
+
+    /** Field by dot-notation path, or null when absent. */
+    Object extractField(String path);
 }

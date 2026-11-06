@@ -1,0 +1,98 @@
+{
+  "cases": [
+    {
+      "name": "valid",
+      "token": "eyJhbGciOiJFUzI1NksiLCJraWQiOiJkaWQ6ZXhhbXBsZTpqd3QtaXNzdWVyI2tleS0xIiwidHlwIjoidmMrand0In0.eyJpc3MiOiJkaWQ6ZXhhbXBsZTpqd3QtaXNzdWVyIiwiaWF0IjoxNzAwMDAwMDAwLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImlzc3VlciI6ImRpZDpleGFtcGxlOmp3dC1pc3N1ZXIifQ.XEc-xN22aVVZ-kUE9cqNDdWfjzXtMMP9U00ccWxa3uMF1OnGH8pIzfPvZr82s8Zo9Z6EabEqDsxMzmezbPIbeQ",
+      "goVerified": true
+    },
+    {
+      "name": "sig65",
+      "token": "eyJhbGciOiJFUzI1NksiLCJraWQiOiJkaWQ6ZXhhbXBsZTpqd3QtaXNzdWVyI2tleS0xIiwidHlwIjoidmMrand0In0.eyJpc3MiOiJkaWQ6ZXhhbXBsZTpqd3QtaXNzdWVyIiwiaWF0IjoxNzAwMDAwMDAwLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImlzc3VlciI6ImRpZDpleGFtcGxlOmp3dC1pc3N1ZXIifQ.XEc-xN22aVVZ-kUE9cqNDdWfjzXtMMP9U00ccWxa3uMF1OnGH8pIzfPvZr82s8Zo9Z6EabEqDsxMzmezbPIbeQA",
+      "goVerified": false,
+      "goError": "invalid signature length"
+    },
+    {
+      "name": "sig_padded",
+      "token": "eyJhbGciOiJFUzI1NksiLCJraWQiOiJkaWQ6ZXhhbXBsZTpqd3QtaXNzdWVyI2tleS0xIiwidHlwIjoidmMrand0In0.eyJpc3MiOiJkaWQ6ZXhhbXBsZTpqd3QtaXNzdWVyIiwiaWF0IjoxNzAwMDAwMDAwLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImlzc3VlciI6ImRpZDpleGFtcGxlOmp3dC1pc3N1ZXIifQ.XEc-xN22aVVZ-kUE9cqNDdWfjzXtMMP9U00ccWxa3uMF1OnGH8pIzfPvZr82s8Zo9Z6EabEqDsxMzmezbPIbeQ==",
+      "goVerified": false,
+      "goError": "invalid signature: illegal base64 data at input byte 86"
+    },
+    {
+      "name": "kid_fragment_only",
+      "token": "eyJhbGciOiJFUzI1NksiLCJraWQiOiIja2V5LTEiLCJ0eXAiOiJ2Yytqd3QifQ.eyJpc3MiOiJkaWQ6ZXhhbXBsZTpqd3QtaXNzdWVyIiwiaWF0IjoxNzAwMDAwMDAwLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImlzc3VlciI6ImRpZDpleGFtcGxlOmp3dC1pc3N1ZXIifQ.vOThU2d42mXlxZIsY0bKzt5glcTAlXNdb_wtSxFusj1lBcpyZVGWBOlgDPZIH0s2Kg5eVcppCrVsS9wTZH5sjg",
+      "goVerified": false,
+      "goError": "failed to resolve verification method: verification method '#key-1' not found in DID 'did:example:jwt-issuer' document"
+    },
+    {
+      "name": "kid_bare",
+      "token": "eyJhbGciOiJFUzI1NksiLCJraWQiOiJrZXktMSIsInR5cCI6InZjK2p3dCJ9.eyJpc3MiOiJkaWQ6ZXhhbXBsZTpqd3QtaXNzdWVyIiwiaWF0IjoxNzAwMDAwMDAwLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImlzc3VlciI6ImRpZDpleGFtcGxlOmp3dC1pc3N1ZXIifQ.Tj1JrM0IQdUwuwdH-rl9hTgN4kbPYIRwtxSXGtuNgDFcwUuECl7FU7FsBj3dLmn5cGZqaa1pJqnIEmq7o7Za3w",
+      "goVerified": false,
+      "goError": "failed to resolve verification method: verification method 'key-1' not found in DID 'did:example:jwt-issuer' document"
+    },
+    {
+      "name": "iat_string",
+      "token": "eyJhbGciOiJFUzI1NksiLCJraWQiOiJkaWQ6ZXhhbXBsZTpqd3QtaXNzdWVyI2tleS0xIiwidHlwIjoidmMrand0In0.eyJpc3MiOiJkaWQ6ZXhhbXBsZTpqd3QtaXNzdWVyIiwiaWF0IjoiMTcwMDAwMDAwMCIsInR5cGUiOlsiVmVyaWZpYWJsZUNyZWRlbnRpYWwiXSwiaXNzdWVyIjoiZGlkOmV4YW1wbGU6and0LWlzc3VlciJ9.R1sK8bBHPrsZXX9NscRcMXrOzZdWs3Lxeof9rcq1whtZum2lUSz6XOpHChQ2kSrcSGtl9znGvIRq1jZhLrAHRw",
+      "goVerified": false,
+      "goError": "invalid iat type: string"
+    },
+    {
+      "name": "iat_zero",
+      "token": "eyJhbGciOiJFUzI1NksiLCJraWQiOiJkaWQ6ZXhhbXBsZTpqd3QtaXNzdWVyI2tleS0xIiwidHlwIjoidmMrand0In0.eyJpc3MiOiJkaWQ6ZXhhbXBsZTpqd3QtaXNzdWVyIiwiaWF0IjowLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImlzc3VlciI6ImRpZDpleGFtcGxlOmp3dC1pc3N1ZXIifQ.TEUmoMGi0sWXGFJWqyKAOtc6xhda0mXOB83PY_gJUl4KXTnBqrfNq3Vgx6mE01MOHka-mJ8e2gMcMABvGeVJcA",
+      "goVerified": false,
+      "goError": "invalid iat value: 0"
+    },
+    {
+      "name": "iat_negative",
+      "token": "eyJhbGciOiJFUzI1NksiLCJraWQiOiJkaWQ6ZXhhbXBsZTpqd3QtaXNzdWVyI2tleS0xIiwidHlwIjoidmMrand0In0.eyJpc3MiOiJkaWQ6ZXhhbXBsZTpqd3QtaXNzdWVyIiwiaWF0IjotNSwidHlwZSI6WyJWZXJpZmlhYmxlQ3JlZGVudGlhbCJdLCJpc3N1ZXIiOiJkaWQ6ZXhhbXBsZTpqd3QtaXNzdWVyIn0.njCVp5BHmoJ2T90LE6qXkT4tiA0yQYOb7qEbh_EAhxNs-hvvNil87I4EGU6-FW5xGKPdJijQ50TStB2USWQg5A",
+      "goVerified": false,
+      "goError": "invalid iat value: -5"
+    },
+    {
+      "name": "iat_float",
+      "token": "eyJhbGciOiJFUzI1NksiLCJraWQiOiJkaWQ6ZXhhbXBsZTpqd3QtaXNzdWVyI2tleS0xIiwidHlwIjoidmMrand0In0.eyJpc3MiOiJkaWQ6ZXhhbXBsZTpqd3QtaXNzdWVyIiwiaWF0IjoxLjdlOSwidHlwZSI6WyJWZXJpZmlhYmxlQ3JlZGVudGlhbCJdLCJpc3N1ZXIiOiJkaWQ6ZXhhbXBsZTpqd3QtaXNzdWVyIn0.9_tAoVLcKLMtV-LomvJ2Ujk-t_OAPEXCSg_puXI_xO9y8VpVJ60NZEM6a8FMzir7NIYIv4EMF62lHpRv7WakZA",
+      "goVerified": true
+    },
+    {
+      "name": "iat_null",
+      "token": "eyJhbGciOiJFUzI1NksiLCJraWQiOiJkaWQ6ZXhhbXBsZTpqd3QtaXNzdWVyI2tleS0xIiwidHlwIjoidmMrand0In0.eyJpc3MiOiJkaWQ6ZXhhbXBsZTpqd3QtaXNzdWVyIiwiaWF0IjpudWxsLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIl0sImlzc3VlciI6ImRpZDpleGFtcGxlOmp3dC1pc3N1ZXIifQ.nqU_jKJNRsa_O_60skHWLayp5Ylq2OWcpPXtMoMhE38Ox-dAfA5iwNvF4adeOTP7LpwRVhlZyByKjpPaOiy2LQ",
+      "goVerified": true
+    },
+    {
+      "name": "case_variant_long_s",
+      "token": "eyJhbGciOiJFUzI1NksiLCJraWQiOiJkaWQ6ZXhhbXBsZTpqd3QtaXNzdWVyI2tleS0xIiwidHlwIjoidmMrand0In0.eyJpc3MiOiJkaWQ6ZXhhbXBsZTpqd3QtaXNzdWVyIiwidHlwZSI6WyJWZXJpZmlhYmxlQ3JlZGVudGlhbCJdLCJpxb_Fv3VlciI6ImRpZDpleGFtcGxlOnZpY3RpbSJ9.dZSLWtOQVX9mn6M3pcA4_BQGTiNuF4D_7nIda3xAEyt9H5us1K2aVXsdgOQ1Ag0fNr9jRQoSWIG7zE84Nsy-Rg",
+      "goVerified": false,
+      "goError": "JWT carries \"iſſuer\", which differs from issuer only by case"
+    },
+    {
+      "name": "case_variant_dotless_i",
+      "token": "eyJhbGciOiJFUzI1NksiLCJraWQiOiJkaWQ6ZXhhbXBsZTpqd3QtaXNzdWVyI2tleS0xIiwidHlwIjoidmMrand0In0.eyJpc3MiOiJkaWQ6ZXhhbXBsZTpqd3QtaXNzdWVyIiwidHlwZSI6WyJWZXJpZmlhYmxlQ3JlZGVudGlhbCJdLCLEsXNzdWVyIjoiZGlkOmV4YW1wbGU6dmljdGltIn0.bMOgW-2NzVQqkoYTOx1QhlKTePeEEgCEgs7sQfAKoHtowgNyYMgzgyBYza30uGS8YC2I2klHQfMW5u2x3571kA",
+      "goVerified": true
+    },
+    {
+      "name": "case_variant_upper",
+      "token": "eyJhbGciOiJFUzI1NksiLCJraWQiOiJkaWQ6ZXhhbXBsZTpqd3QtaXNzdWVyI2tleS0xIiwidHlwIjoidmMrand0In0.eyJpc3MiOiJkaWQ6ZXhhbXBsZTpqd3QtaXNzdWVyIiwidHlwZSI6WyJWZXJpZmlhYmxlQ3JlZGVudGlhbCJdLCJJc3N1ZXIiOiJkaWQ6ZXhhbXBsZTp2aWN0aW0ifQ.tKAL2qJgQJfxfl297-yKQFJfXDIcnoFwTd2RUlxgFvhgJQQY5Ahdus75gAhi5LFOaBOM8TmxS27r5jS0Yb1x7g",
+      "goVerified": false,
+      "goError": "JWT carries \"Issuer\", which differs from issuer only by case"
+    }
+  ],
+  "didDocument": {
+    "@context": null,
+    "id": "did:example:jwt-issuer",
+    "verificationMethod": [
+      {
+        "id": "did:example:jwt-issuer#key-1",
+        "type": "EcdsaSecp256k1VerificationKey2019",
+        "controller": "did:example:jwt-issuer",
+        "publicKeyHex": "04b35b116329ad5ce292030a63deac8a75428d0029325500aac957bfdb632737464442c01f55fcdac94f902f2092249e899cf995a9ac764cac045de45c3f403db8"
+      }
+    ],
+    "authentication": [
+      "did:example:jwt-issuer#key-1"
+    ],
+    "assertionMethod": [
+      "did:example:jwt-issuer#key-1"
+    ],
+    "controller": null,
+    "didDocumentMetadata": null
+  }
+}

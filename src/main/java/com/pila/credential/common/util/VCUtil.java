@@ -40,8 +40,17 @@ public class VCUtil {
             if (proof.getProofValue() != null && !proof.getProofValue().isEmpty()) {
                 proofMap.put("proofValue", proof.getProofValue());
             }
+            if (proof.getJws() != null && !proof.getJws().isEmpty()) {
+                proofMap.put("jws", proof.getJws());
+            }
             if (proof.getCryptosuite() != null && !proof.getCryptosuite().isEmpty()) {
                 proofMap.put("cryptosuite", proof.getCryptosuite());
+            }
+            if (proof.getChallenge() != null && !proof.getChallenge().isEmpty()) {
+                proofMap.put("challenge", proof.getChallenge());
+            }
+            if (proof.getDomain() != null && !proof.getDomain().isEmpty()) {
+                proofMap.put("domain", proof.getDomain());
             }
             result.add(proofMap);
         }

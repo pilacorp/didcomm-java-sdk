@@ -1,7 +1,8 @@
 package com.pila.credential.common.verificationmethod;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.util.List;
 import java.util.Map;
@@ -9,7 +10,8 @@ import java.util.Map;
 /**
  * DIDDocument represents the structure of a resolved DID Document.
  */
-@Data
+@Getter
+@Setter
 public class DIDDocument {
     @JsonProperty("@context")
     private List<String> context;
@@ -27,7 +29,7 @@ public class DIDDocument {
     private List<String> assertionMethod;
 
     @JsonProperty("controller")
-    private Object controller; // Can be string or List<String>
+    private Object controller;
 
     @JsonProperty("didDocumentMetadata")
     private Map<String, Object> didDocumentMetadata;

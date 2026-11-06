@@ -1,13 +1,14 @@
 package com.pila.credential.vc;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 
 /**
- * Status represents the credentialStatus field as per W3C Verifiable
- * Credentials.
+ * Status represents the credentialStatus field as per W3C Verifiable Credentials.
  */
-@Data
+@Getter
+@Setter
 public class Status {
     @JsonProperty("id")
     private String id;
