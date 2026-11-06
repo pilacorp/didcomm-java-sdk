@@ -6,8 +6,6 @@ import com.apicatalog.jsonld.document.JsonDocument;
 import com.apicatalog.jsonld.uri.UriValidationPolicy;
 import com.apicatalog.rdf.nquads.NQuadsWriter;
 
-import com.apicatalog.rdf.canon.RdfCanon;
-import com.apicatalog.rdf.canon.RdfCanonTimeTicker;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.nio.charset.StandardCharsets;
@@ -48,40 +46,36 @@ public class Processor {
     }
 
     private static byte[] canonicalizeStandardized(Map<String, Object> standardizedDoc) throws Exception {
-        String json = new ObjectMapper().writeValueAsString(standardizedDoc);
+        return JsonLdLimits.guard("canonicalize document", () -> {
+            String json = new ObjectMapper().writeValueAsString(standardizedDoc);
 
-        JsonStructure jsonStructure;
-        try (JsonReader reader = Json.createReader(new StringReader(json))) {
-            jsonStructure = reader.read();
-        }
-        JsonDocument document = JsonDocument.of(jsonStructure);
+            JsonStructure jsonStructure;
+            try (JsonReader reader = Json.createReader(new StringReader(json))) {
+                jsonStructure = reader.read();
+            }
+            JsonDocument document = JsonDocument.of(jsonStructure);
 
-        // 1) Create RDFC canonicalizer
-        var canon = RdfCanon.create("SHA-256", new RdfCanonTimeTicker(5 * 1000));
+            // URI validation is disabled on purpose. Credentials issued by the Go SDK
+            // (json-gold) carry types such as "IdentifyCredential" that no context defines,
+            // which expand to relative IRIs. Titanium's default policy rejects those IRIs and
+            // silently drops the statements - for such a credential the whole document
+            // disappears and the signing input degrades to SHA-256 of an empty N-Quads set.
+            // UriValidationPolicy.None keeps them, so this produces byte-for-byte the same
+            // canonical N-Quads as json-gold and proofs verify across both SDKs.
+            //
+            // Like Go (which leaves SafeMode off here), undefined terms are NOT rejected: the legacy
+            // canonicalizer stays lenient. Its loader is a fresh per-operation budget.
+            JsonLdOptions options = ContextBudget.newOptions();
+            options.setUriValidation(UriValidationPolicy.None);
+            ContextBudget.limitInlineContexts(options, standardizedDoc);
 
-        // 2) Provide RDF from JSON-LD to canonicalizer using local context loader.
-        //
-        // URI validation is disabled on purpose. Credentials issued by the Go SDK
-        // (json-gold) carry types such as "IdentifyCredential" that no context defines,
-        // which expand to relative IRIs. Titanium's default policy rejects those IRIs and
-        // silently drops the statements - for such a credential the whole document
-        // disappears and the signing input degrades to SHA-256 of an empty N-Quads set.
-        // UriValidationPolicy.None keeps them, so this produces byte-for-byte the same
-        // canonical N-Quads as json-gold and proofs verify across both SDKs.
-        JsonLdOptions options = new JsonLdOptions();
-        options.setDocumentLoader(new LocalContextDocumentLoader());
-        options.setUriValidation(UriValidationPolicy.None);
+            // RDFC canonicalizer, fed through the blank-node work cap.
+            var canon = JsonLdLimits.canon(c -> JsonLd.toRdf(document).options(options).provide(c));
 
-        JsonLd.toRdf(document)
-                .options(options)
-                .provide(canon);
-
-        // 3) Write canonical N-Quads to writer
-        StringWriter writer = new StringWriter();
-        canon.provide(new NQuadsWriter(writer));
-
-        // 4) Hash canonical N-Quads
-        return writer.toString().getBytes(StandardCharsets.UTF_8);
+            StringWriter writer = new StringWriter();
+            canon.provide(new NQuadsWriter(writer));
+            return writer.toString().getBytes(StandardCharsets.UTF_8);
+        });
     }
 
     public static byte[] computeDigest(byte[] data) throws NoSuchAlgorithmException {

@@ -4,7 +4,6 @@ import com.apicatalog.jsonld.JsonLd;
 import com.apicatalog.jsonld.JsonLdOptions;
 import com.apicatalog.jsonld.document.JsonDocument;
 import com.apicatalog.rdf.canon.RdfCanon;
-import com.apicatalog.rdf.canon.RdfCanonTimeTicker;
 import com.apicatalog.rdf.nquads.NQuadsReader;
 import com.apicatalog.rdf.nquads.NQuadsWriter;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -31,7 +30,6 @@ import java.util.Map;
 public final class JsonLdSdProcessor {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    private static final LocalContextDocumentLoader LOADER = new LocalContextDocumentLoader();
 
     private JsonLdSdProcessor() {
     }
@@ -57,51 +55,57 @@ public final class JsonLdSdProcessor {
         if (doc == null) {
             throw new IllegalArgumentException("canonicalize: document is nil");
         }
-        JsonDocument expanded = toDocument(expandJsonLd(doc));
-        return canonicalizeDocumentWithIdMap(expanded);
+        return JsonLdLimits.guard("canonicalize", () -> canonicalizeDocumentWithIdMap(toDocument(expandJsonLd(doc))));
     }
 
     public static CanonicalizeResult canonicalizeNQuadsWithIdMap(List<String> nquads) throws Exception {
         String input = String.join("", nquads);
-        RdfCanon canon = RdfCanon.create("SHA-256", new RdfCanonTimeTicker(5 * 1000));
-        new NQuadsReader(new StringReader(input)).provide(canon);
-        return writeCanonResult(canon);
+        return JsonLdLimits.guard("canonicalize", () ->
+                writeCanonResult(JsonLdLimits.canon(c -> new NQuadsReader(new StringReader(input)).provide(c))));
     }
 
     @SuppressWarnings("unchecked")
     public static List<Object> expandJsonLd(Map<String, Object> doc) throws Exception {
-        Map<String, Object> std = preserveNativeTypes(doc);
-        JsonDocument document = toDocument(std);
-        JsonLdOptions opts = sdOptions();
-        JsonArray expanded = JsonLd.expand(document).options(opts).get();
-        List<Object> out = MAPPER.readValue(expanded.toString(), new TypeReference<>() {
+        return JsonLdLimits.guard("expand", () -> {
+            Map<String, Object> std = preserveNativeTypes(doc);
+            JsonDocument document = toDocument(std);
+            JsonLdOptions opts = sdOptions();
+            ContextBudget.limitInlineContexts(opts, std);
+            JsonArray expanded = JsonLd.expand(document).options(opts).get();
+            List<Object> out = MAPPER.readValue(expanded.toString(), new TypeReference<>() {
+            });
+            checkExpandedTypes(out);
+            rejectRelativeIds(out);
+            return out;
         });
-        checkExpandedTypes(out);
-        rejectRelativeIds(out);
-        return out;
     }
 
     @SuppressWarnings("unchecked")
     public static Map<String, Object> compactJsonLd(List<Object> expanded, Object context) throws Exception {
-        JsonDocument expandedDoc = toDocument(expanded);
-        JsonDocument ctxDoc = contextDocument(context);
-        JsonObject compact = JsonLd.compact(expandedDoc, ctxDoc).options(sdOptions()).get();
-        return MAPPER.readValue(compact.toString(), new TypeReference<>() {
+        return JsonLdLimits.guard("compact", () -> {
+            JsonDocument expandedDoc = toDocument(expanded);
+            JsonDocument ctxDoc = contextDocument(context);
+            JsonObject compact = JsonLd.compact(expandedDoc, ctxDoc).options(sdOptions()).get();
+            return MAPPER.readValue(compact.toString(), new TypeReference<>() {
+            });
         });
     }
 
     public static List<String> toRdfNQuads(Object doc) throws Exception {
-        JsonDocument document = toDocument(doc);
-        JsonLdOptions opts = sdOptions();
-        StringWriter writer = new StringWriter();
-        JsonLd.toRdf(document).options(opts).provide(new NQuadsWriter(writer));
-        return splitNQuadsKeepNl(writer.toString());
+        return JsonLdLimits.guard("to rdf", () -> {
+            JsonDocument document = toDocument(doc);
+            JsonLdOptions opts = sdOptions();
+            ContextBudget.limitInlineContexts(opts, doc);
+            StringWriter writer = new StringWriter();
+            JsonLd.toRdf(document).options(opts).provide(new NQuadsWriter(writer));
+            return splitNQuadsKeepNl(writer.toString());
+        });
     }
 
     private static CanonicalizeResult canonicalizeDocumentWithIdMap(JsonDocument document) throws Exception {
-        RdfCanon canon = RdfCanon.create("SHA-256", new RdfCanonTimeTicker(5 * 1000));
-        JsonLd.toRdf(document).options(sdOptions()).provide(canon);
-        return writeCanonResult(canon);
+        JsonLdOptions opts = sdOptions();
+        // The input is already expanded (expandJsonLd limited its inline contexts); remote ones go through opts' budget.
+        return writeCanonResult(JsonLdLimits.canon(c -> JsonLd.toRdf(document).options(opts).provide(c)));
     }
 
     private static CanonicalizeResult writeCanonResult(RdfCanon canon) throws Exception {
@@ -113,7 +117,7 @@ public final class JsonLdSdProcessor {
     }
 
     static JsonLdOptions sdOptions() {
-        JsonLdOptions opts = new JsonLdOptions(LOADER);
+        JsonLdOptions opts = ContextBudget.newOptions();
         opts.setUndefinedTermsPolicy(JsonLdOptions.ProcessingPolicy.Fail);
         return opts;
     }

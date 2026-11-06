@@ -55,42 +55,33 @@ public final class LocalContextDocumentLoader implements DocumentLoader {
     @Override
     public Document loadDocument(URI url, DocumentLoaderOptions options) throws JsonLdError {
         Objects.requireNonNull(url, "url must not be null");
-
-        // 1) Known contexts
-        String known = WELL_KNOWN_CONTEXTS.get(url.toString());
-        if (known != null) {
-            Document local = tryClasspath(url, known);
-            if (local != null) return local;
-            return fallback.loadDocument(url, options);
-        }
-
-        // 2) Conventional contexts/<host>/<path>.jsonld
-        Optional<String> conventional = toConventionalClasspathPath(url);
-        if (conventional.isPresent()) {
-            Document local = tryClasspath(url, conventional.get());
-            if (local != null) return local;
-        }
-
-        // 3) Fallback (network)
+        byte[] local = localBytes(url);
+        if (local != null) return documentOf(url, local);
         return fallback.loadDocument(url, options);
     }
 
-    private Document tryClasspath(URI url, String resourcePath) throws JsonLdError {
-        try (InputStream in = openClasspath(resourcePath)) {
-            if (in == null) return null;
+    /** Bundled bytes for a well-known or conventional classpath context, or null when there are none. */
+    static byte[] localBytes(URI url) throws JsonLdError {
+        String known = WELL_KNOWN_CONTEXTS.get(url.toString());
+        if (known != null) return readClasspath(known);
+        Optional<String> conventional = toConventionalClasspathPath(url);
+        return conventional.isPresent() ? readClasspath(conventional.get()) : null;
+    }
 
-            JsonDocument doc = JsonDocument.of(in);
-            doc.setDocumentUrl(url);
-            doc.setContextUrl(url);
-            return doc;
+    static Document documentOf(URI url, byte[] data) throws JsonLdError {
+        JsonDocument doc = JsonDocument.of(new java.io.ByteArrayInputStream(data));
+        doc.setDocumentUrl(url);
+        doc.setContextUrl(url);
+        return doc;
+    }
+
+    private static byte[] readClasspath(String resourcePath) throws JsonLdError {
+        ClassLoader cl = Thread.currentThread().getContextClassLoader();
+        try (InputStream in = cl.getResourceAsStream(resourcePath)) {
+            return in == null ? null : in.readAllBytes();
         } catch (IOException e) {
             throw new JsonLdError(JsonLdErrorCode.LOADING_DOCUMENT_FAILED, e.getMessage());
         }
-    }
-
-    private InputStream openClasspath(String resourcePath) {
-        ClassLoader cl = Thread.currentThread().getContextClassLoader();
-        return cl.getResourceAsStream(resourcePath);
     }
 
     private static Optional<String> toConventionalClasspathPath(URI url) {
