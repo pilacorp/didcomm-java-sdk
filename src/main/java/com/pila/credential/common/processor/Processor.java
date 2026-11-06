@@ -31,18 +31,20 @@ public class Processor {
     }
 
     /**
-     * "Library" canonicalizer: native JSON number/boolean types are preserved, matching
-     * go-credential-sdk's {@code Canonicalize}. Used to sign and verify new proofs
-     * (ecdsa-rdfc-2019, EcdsaSecp256k1Signature2019). Shares the lenient JSON-LD options
-     * of {@link #canonicalizeDocument} so Go-issued terms that expand to relative IRIs are
-     * kept rather than dropped. A numeric claim signed with the compatible canonicalizer
-     * would not interoperate with Go.
+     * "Library" canonicalizer, go-credential-sdk's {@code Canonicalize}: native JSON number/boolean
+     * types, undefined terms rejected, relative {@code @id}/{@code @type} rejected, empty output an
+     * error. Used to sign and verify new proofs (ecdsa-rdfc-2019, EcdsaSecp256k1Signature2019). The
+     * lenient {@link #canonicalizeDocument} is for verifying legacy proofs only.
      */
     public static byte[] canonicalizeDocumentNativeTypes(Map<String, Object> doc) throws Exception {
         if (doc == null) {
             throw new IllegalArgumentException("failed to canonicalize document: document is nil");
         }
-        return canonicalizeStandardized(JsonLdSdProcessor.preserveNativeTypes(doc));
+        try {
+            return JsonLdSdProcessor.canonicalize(doc);
+        } catch (Exception e) {
+            throw new Exception("failed to canonicalize document: " + e.getMessage(), e);
+        }
     }
 
     private static byte[] canonicalizeStandardized(Map<String, Object> standardizedDoc) throws Exception {
@@ -76,6 +78,25 @@ public class Processor {
             canon.provide(new NQuadsWriter(writer));
             return writer.toString().getBytes(StandardCharsets.UTF_8);
         });
+    }
+
+    /**
+     * Go's {@code processor.WithDocumentLoader}: runs {@code body} with {@code loader} serving every
+     * context that is not bundled (bundled W3C contexts stay offline). Applies to the calling thread only.
+     */
+    public static <T> T withDocumentLoader(com.apicatalog.jsonld.loader.DocumentLoader loader,
+            java.util.concurrent.Callable<T> body) throws Exception {
+        com.apicatalog.jsonld.loader.DocumentLoader prev = ContextBudget.LOADER_OVERRIDE.get();
+        ContextBudget.LOADER_OVERRIDE.set(loader);
+        try {
+            return body.call();
+        } finally {
+            if (prev == null) {
+                ContextBudget.LOADER_OVERRIDE.remove();
+            } else {
+                ContextBudget.LOADER_OVERRIDE.set(prev);
+            }
+        }
     }
 
     public static byte[] computeDigest(byte[] data) throws NoSuchAlgorithmException {
@@ -119,12 +140,63 @@ public class Processor {
             return converted;
         }
         if (value instanceof Number) {
-            return buildTypedValue(value.toString(), "http://www.w3.org/2001/XMLSchema#string");
+            return buildTypedValue(goFloatV(((Number) value).doubleValue()), "http://www.w3.org/2001/XMLSchema#string");
         }
         if (value instanceof Boolean) {
             return buildTypedValue(value.toString(), "http://www.w3.org/2001/XMLSchema#boolean");
         }
         return buildTypedValue(value.toString(), "http://www.w3.org/2001/XMLSchema#string");
+    }
+
+    /**
+     * Go's {@code fmt.Sprintf("%v", float64)}: shortest digits, exponent form when the decimal
+     * exponent is below -4 or at least 6 ({@code 1e+06}, {@code 1.7e+09}, {@code 1e-05}).
+     * Legacy VCs were signed from float64 values, so every JSON number goes through here.
+     */
+    /**
+     * The shortest decimal that round-trips to {@code a} (> 0), like Go's {@code strconv} -1 precision.
+     * {@code Double.toString} always prints two digits, so a one-digit shortest ({@code 5e-324}) is recovered here.
+     */
+    public static java.math.BigDecimal shortestDecimal(double a) {
+        java.math.BigDecimal bd = new java.math.BigDecimal(Double.toString(a)).stripTrailingZeros();
+        if (bd.precision() == 2) {
+            java.math.BigDecimal one = bd.round(new java.math.MathContext(1, java.math.RoundingMode.HALF_EVEN));
+            if (one.doubleValue() == a) {
+                return one.stripTrailingZeros();
+            }
+        }
+        return bd;
+    }
+
+    static String goFloatV(double d) {
+        if (d == 0) {
+            return 1 / d < 0 ? "-0" : "0";
+        }
+        java.math.BigDecimal bd = shortestDecimal(Math.abs(d));
+        String digits = bd.unscaledValue().toString();
+        int nd = digits.length();
+        int dp = nd - bd.scale();
+        int exp = dp - 1;
+        StringBuilder sb = new StringBuilder(d < 0 ? "-" : "");
+        if (exp < -4 || exp >= 6) {
+            sb.append(digits.charAt(0));
+            if (nd > 1) {
+                sb.append('.').append(digits, 1, nd);
+            }
+            sb.append('e').append(exp < 0 ? '-' : '+');
+            int ae = Math.abs(exp);
+            if (ae < 10) {
+                sb.append('0');
+            }
+            return sb.append(ae).toString();
+        }
+        if (dp <= 0) {
+            return sb.append("0.").append("0".repeat(-dp)).append(digits).toString();
+        }
+        if (dp >= nd) {
+            return sb.append(digits).append("0".repeat(dp - nd)).toString();
+        }
+        return sb.append(digits, 0, dp).append('.').append(digits, dp, nd).toString();
     }
 
     private static Map<String, Object> buildTypedValue(String value, String type) {

@@ -39,6 +39,9 @@ final class ContextBudget implements DocumentLoader {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+    /** Per-call loader for contexts that are not bundled, see {@link Processor#withDocumentLoader}. */
+    static final ThreadLocal<DocumentLoader> LOADER_OVERRIDE = new ThreadLocal<>();
+
     int loads;
     long bytes;
     long deadline = System.nanoTime() + MAX_CONTEXT_LOAD_NANOS;
@@ -52,6 +55,12 @@ final class ContextBudget implements DocumentLoader {
             return LocalContextDocumentLoader.documentOf(url, local);
         }
         if (++loads > MAX_CONTEXT_LOADS || System.nanoTime() - deadline > 0) throw overflow();
+        DocumentLoader injected = LOADER_OVERRIDE.get();
+        if (injected != null) {
+            Document d = injected.loadDocument(url, options);
+            if (d == null) throw new JsonLdError(JsonLdErrorCode.LOADING_DOCUMENT_FAILED, "context not found: " + url);
+            return d;
+        }
         try {
             RemoteContextLoader.Fetched f = RemoteContextLoader.current().load(url.toString());
             if ((bytes += f.raw().length) > MAX_CONTEXT_BYTES_PER_OPERATION) throw overflow();

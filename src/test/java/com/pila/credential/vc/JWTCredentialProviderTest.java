@@ -36,6 +36,9 @@ public class JWTCredentialProviderTest {
 
             CredentialContents contents = new CredentialContents();
             contents.setIssuer(issuerDid);
+            contents.setSubject(java.util.List.of(new com.pila.credential.vc.Subject("did:example:subject", new java.util.HashMap<>())));
+            contents.setContext(java.util.List.of("https://www.w3.org/2018/credentials/v1"));
+            contents.setTypes(java.util.List.of("VerifiableCredential"));
             contents.setValidFrom(Instant.now());
 
             JWTCredential credential = JWTCredential.newJWTCredential(contents);
@@ -67,6 +70,9 @@ public class JWTCredentialProviderTest {
 
             CredentialContents contents = new CredentialContents();
             contents.setIssuer(issuerDid);
+            contents.setSubject(java.util.List.of(new com.pila.credential.vc.Subject("did:example:subject", new java.util.HashMap<>())));
+            contents.setContext(java.util.List.of("https://www.w3.org/2018/credentials/v1"));
+            contents.setTypes(java.util.List.of("VerifiableCredential"));
             contents.setValidFrom(Instant.now());
 
             JWTCredential credential = JWTCredential.newJWTCredential(contents);
@@ -83,27 +89,51 @@ public class JWTCredentialProviderTest {
 
     @Test
     void addCustomProof_accepts_65_byte_signature_and_normalizes() throws Exception {
-        CredentialContents contents = new CredentialContents();
-        contents.setIssuer("did:example:issuer");
-        contents.setValidFrom(Instant.now());
+        String privKeyHex = "2c79686425aee8002cb189bf294f2d52ca43851797c7b6e78a7dc361c4373e46";
+        String issuerDid = "did:example:issuer";
+        HttpServer server = startDidResolver(issuerDid + "#key-1", publicKeyFromPrivHex(privKeyHex));
+        try {
+            CredentialConfig.init("http://127.0.0.1:" + server.getAddress().getPort());
+            CredentialContents contents = new CredentialContents();
+            contents.setIssuer(issuerDid);
+            contents.setSubject(java.util.List.of(new com.pila.credential.vc.Subject("did:example:subject", new java.util.HashMap<>())));
+            contents.setContext(java.util.List.of("https://www.w3.org/2018/credentials/v1"));
+            contents.setTypes(java.util.List.of("VerifiableCredential"));
+            contents.setValidFrom(Instant.now());
 
-        JWTCredential credential = JWTCredential.newJWTCredential(contents);
+            JWTCredential credential = JWTCredential.newJWTCredential(contents);
 
-        byte[] sig65 = new byte[65];
-        for (int i = 0; i < 65; i++) {
-            sig65[i] = (byte) (100 + i);
+            // External signer over the signing input, returning r||s||v: the trailing recovery id is trimmed.
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256").digest(credential.getSigningInput());
+            byte[] rs = new DefaultSignerProvider(privKeyHex).sign(digest);
+            byte[] sig65 = java.util.Arrays.copyOf(rs, 65);
+
+            // A signature by another key (or over other data) is held to the VM the header names and refused.
+            Proof bad = new Proof();
+            bad.setSignature(new byte[65]);
+            assertThrows(Exception.class, () -> credential.addCustomProof(bad));
+
+            Proof proof = new Proof();
+            proof.setSignature(sig65);
+            credential.addCustomProof(proof);
+
+            String jwt = (String) credential.serialize();
+            String[] parts = jwt.split("\\.");
+            assertEquals(3, parts.length);
+            assertEquals(64, Base64.getUrlDecoder().decode(parts[2]).length);
+            credential.verify();
+
+            // Signing again would replace that signature: refused unless withReplaceProof.
+            Proof again = new Proof();
+            again.setSignature(rs);
+            com.pila.credential.common.error.CredentialException ex = assertThrows(
+                    com.pila.credential.common.error.CredentialException.class,
+                    () -> credential.addCustomProof(again));
+            assertEquals(com.pila.credential.common.error.CredentialException.Code.ALREADY_SIGNED, ex.getCode());
+            credential.addCustomProof(again, new CredentialOptions().withReplaceProof());
+        } finally {
+            server.stop(0);
         }
-
-        Proof proof = new Proof();
-        proof.setSignature(sig65);
-        credential.addCustomProof(proof);
-
-        String jwt = (String) credential.serialize();
-        String[] parts = jwt.split("\\.");
-        assertEquals(3, parts.length);
-
-        byte[] signatureBytes = Base64.getUrlDecoder().decode(parts[2]);
-        assertEquals(64, signatureBytes.length);
     }
 
     private static HttpServer startDidResolver(String verificationMethodId, String publicKeyHex) throws Exception {

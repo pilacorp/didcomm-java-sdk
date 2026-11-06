@@ -17,8 +17,16 @@ public class VerificationMethodResolver implements CredentialResolver {
     private static final ObjectMapper objectMapper = new ObjectMapper();
     private static final int HTTP_TIMEOUT_MS = 10000;
 
+    private java.net.http.HttpClient httpClient;
+
     public VerificationMethodResolver(String baseURL) {
         this.baseURL = baseURL;
+    }
+
+    /** Uses the given client for DID lookups (Go {@code WithHTTPClient}); default is {@link HttpURLConnection}. */
+    public VerificationMethodResolver withHttpClient(java.net.http.HttpClient client) {
+        this.httpClient = client;
+        return this;
     }
 
     public String getDefaultPublicKey(String issuer) throws Exception {
@@ -59,20 +67,30 @@ public class VerificationMethodResolver implements CredentialResolver {
             throw new Exception("DID resolver URL must include a host: " + apiURL);
         }
 
-        HttpURLConnection conn = (HttpURLConnection) uri.toURL().openConnection();
-        conn.setRequestMethod("GET");
-        conn.setConnectTimeout(HTTP_TIMEOUT_MS);
-        conn.setReadTimeout(HTTP_TIMEOUT_MS);
-
-        int responseCode = conn.getResponseCode();
-        if (responseCode != HttpURLConnection.HTTP_OK) {
-            throw new Exception("DID resolver API returned non-200 status: " + responseCode);
-        }
-
         String body;
-        try (InputStream inputStream = conn.getInputStream();
-                Scanner scanner = new Scanner(inputStream, StandardCharsets.UTF_8).useDelimiter("\\A")) {
-            body = scanner.hasNext() ? scanner.next() : "";
+        if (httpClient != null) {
+            java.net.http.HttpResponse<String> resp = httpClient.send(
+                    java.net.http.HttpRequest.newBuilder(uri)
+                            .timeout(java.time.Duration.ofMillis(HTTP_TIMEOUT_MS)).GET().build(),
+                    java.net.http.HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (resp.statusCode() != 200) {
+                throw new Exception("DID resolver API returned non-200 status: " + resp.statusCode());
+            }
+            body = resp.body();
+        } else {
+            HttpURLConnection conn = (HttpURLConnection) uri.toURL().openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(HTTP_TIMEOUT_MS);
+            conn.setReadTimeout(HTTP_TIMEOUT_MS);
+
+            int responseCode = conn.getResponseCode();
+            if (responseCode != HttpURLConnection.HTTP_OK) {
+                throw new Exception("DID resolver API returned non-200 status: " + responseCode);
+            }
+            try (InputStream inputStream = conn.getInputStream();
+                    Scanner scanner = new Scanner(inputStream, StandardCharsets.UTF_8).useDelimiter("\\A")) {
+                body = scanner.hasNext() ? scanner.next() : "";
+            }
         }
 
         try {

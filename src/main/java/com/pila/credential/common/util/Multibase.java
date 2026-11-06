@@ -35,6 +35,10 @@ public final class Multibase {
         if (multibase.charAt(0) != 'z') {
             throw new IllegalArgumentException("expected base58btc multibase prefix 'z'");
         }
+        if (multibase.length() == 1) {
+            // Go (mr-tron/base58) rejects the empty payload.
+            throw new IllegalArgumentException("base58: zero length string");
+        }
         return decode(multibase.substring(1));
     }
 
@@ -68,7 +72,7 @@ public final class Multibase {
             }
             value = value.multiply(BASE).add(BigInteger.valueOf(INDEXES[c]));
         }
-        byte[] decoded = value.toByteArray();
+        byte[] decoded = value.signum() == 0 ? new byte[0] : value.toByteArray();
         int zeros = 0;
         while (zeros < input.length() && input.charAt(zeros) == '1') {
             zeros++;

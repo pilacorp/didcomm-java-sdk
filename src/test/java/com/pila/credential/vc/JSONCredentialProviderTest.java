@@ -38,6 +38,9 @@ public class JSONCredentialProviderTest {
 
             CredentialContents contents = new CredentialContents();
             contents.setIssuer(issuerDid);
+            contents.setSubject(java.util.List.of(new com.pila.credential.vc.Subject("did:example:subject", new java.util.HashMap<>())));
+            contents.setContext(java.util.List.of("https://www.w3.org/ns/credentials/v2"));
+            contents.setTypes(java.util.List.of("VerifiableCredential"));
             contents.setValidFrom(Instant.now());
 
             JSONCredential credential = JSONCredential.newJSONCredential(contents);
@@ -73,6 +76,9 @@ public class JSONCredentialProviderTest {
 
             CredentialContents contents = new CredentialContents();
             contents.setIssuer(issuerDid);
+            contents.setSubject(java.util.List.of(new com.pila.credential.vc.Subject("did:example:subject", new java.util.HashMap<>())));
+            contents.setContext(java.util.List.of("https://www.w3.org/ns/credentials/v2"));
+            contents.setTypes(java.util.List.of("VerifiableCredential"));
             contents.setValidFrom(Instant.now());
 
             JSONCredential credential = JSONCredential.newJSONCredential(contents);

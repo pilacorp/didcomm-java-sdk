@@ -30,16 +30,20 @@ public final class LocalContextDocumentLoader implements DocumentLoader {
     private static final String CLASSPATH_PREFIX = "contexts/";
 
     // Map remote URL -> classpath resource under contexts/
-    private static final Map<String, String> WELL_KNOWN_CONTEXTS = Map.of(
-            "https://www.w3.org/2018/credentials/v1", CLASSPATH_PREFIX + "w3c.credential.v1.json",
-            "https://www.w3.org/2018/credentials/v1.jsonld", CLASSPATH_PREFIX + "w3c.credential.v1.json",
-            "https://www.w3.org/ns/credentials/v2", CLASSPATH_PREFIX + "w3c.credential.v2.json",
-            "https://www.w3.org/ns/credentials/v2.jsonld", CLASSPATH_PREFIX + "w3c.credential.v2.json",
-            "https://www.w3.org/ns/credentials/examples/v2", CLASSPATH_PREFIX + "w3c.credential.examples.v2.json",
-            "https://www.w3.org/ns/credentials/examples/v2.jsonld", CLASSPATH_PREFIX + "w3c.credential.examples.v2.json",
-            "https://w3id.org/security/data-integrity/v2", CLASSPATH_PREFIX + "w3c.security.data-integrity.v2.json",
-            "https://w3id.org/citizenship/v4rc1", CLASSPATH_PREFIX + "w3c.citizenship.v4rc1.json",
-            "https://w3id.org/citizenship/v4rc1.jsonld", CLASSPATH_PREFIX + "w3c.citizenship.v4rc1.json"
+    private static final Map<String, String> WELL_KNOWN_CONTEXTS = Map.ofEntries(
+            Map.entry("https://www.w3.org/2018/credentials/v1", CLASSPATH_PREFIX + "w3c.credential.v1.json"),
+            Map.entry("https://www.w3.org/2018/credentials/v1.jsonld", CLASSPATH_PREFIX + "w3c.credential.v1.json"),
+            Map.entry("https://www.w3.org/ns/credentials/v2", CLASSPATH_PREFIX + "w3c.credential.v2.json"),
+            Map.entry("https://www.w3.org/ns/credentials/v2.jsonld", CLASSPATH_PREFIX + "w3c.credential.v2.json"),
+            Map.entry("https://www.w3.org/ns/credentials/examples/v2", CLASSPATH_PREFIX + "w3c.credential.examples.v2.json"),
+            Map.entry("https://www.w3.org/ns/credentials/examples/v2.jsonld", CLASSPATH_PREFIX + "w3c.credential.examples.v2.json"),
+            Map.entry("https://w3id.org/security/data-integrity/v2", CLASSPATH_PREFIX + "w3c.security.data-integrity.v2.json"),
+            Map.entry("https://w3id.org/citizenship/v4rc1", CLASSPATH_PREFIX + "w3c.citizenship.v4rc1.json"),
+            Map.entry("https://w3id.org/citizenship/v4rc1.jsonld", CLASSPATH_PREFIX + "w3c.citizenship.v4rc1.json"),
+            Map.entry("https://w3id.org/security/v1", CLASSPATH_PREFIX + "w3c.security.v1.json"),
+            Map.entry("https://w3id.org/security/v2", CLASSPATH_PREFIX + "w3c.security.v2.json"),
+            Map.entry("https://w3id.org/security/suites/secp256k1-2019/v1",
+                    CLASSPATH_PREFIX + "w3c.security.secp256k1-2019.v1.json")
     );
 
     private final DocumentLoader fallback;

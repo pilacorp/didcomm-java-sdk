@@ -17,6 +17,7 @@ import com.pila.credential.common.verificationmethod.DidKeyP256Resolver;
 import com.pila.credential.common.verificationmethod.StrictPurposeCheck;
 import com.pila.credential.common.verificationmethod.VerificationMethodEntry;
 import com.pila.credential.common.verificationmethod.VerificationMethodKeyKind;
+import com.pila.credential.common.verificationmethod.VerificationMethodMaterial;
 import com.pila.credential.common.verificationmethod.VerificationMethodResolver;
 
 import java.math.BigInteger;
@@ -43,6 +44,8 @@ public class JSONMap extends HashMap<String, Object> {
     public static final String ECDSA_RDFC_2019 = "ecdsa-rdfc-2019";
     public static final String ECDSA_SD_2023 = "ecdsa-sd-2023";
     public static final String ECDSA_SECP_KEY = "EcdsaSecp256k1VerificationKey2019";
+    public static final String JSON_WEB_SIGNATURE_2020 = "JsonWebSignature2020";
+    public static final String JSON_WEB_KEY_2020 = "JsonWebKey2020";
     private static final String DATA_INTEGRITY_V2_CONTEXT = "https://w3id.org/security/data-integrity/v2";
     private static final String SECP256K1_SUITE_CONTEXT = "https://w3id.org/security/suites/secp256k1-2019/v1";
     private static final String ALG_ES256K = "ES256K";
@@ -126,29 +129,6 @@ public class JSONMap extends HashMap<String, Object> {
     }
 
     /**
-     * Adds an ECDSA proof to the JSONMap.
-     */
-    @Deprecated
-    public void addECDSAProof(String privKeyHex,
-            String verificationMethod,
-            String proofPurpose) throws Exception {
-        addECDSAProofByProvider(new DefaultSignerProvider(privKeyHex), verificationMethod, proofPurpose);
-    }
-
-    /**
-     * Legacy overload kept for backward compatibility.
-     *
-     * @deprecated Use {@link #addECDSAProofByProvider(SignerProvider, String, String, String)}.
-     */
-    @Deprecated
-    public void addECDSAProof(String privKeyHex,
-            String verificationMethod,
-            String proofPurpose,
-            String didBaseURL) throws Exception {
-        addECDSAProofByProvider(new DefaultSignerProvider(privKeyHex), verificationMethod, proofPurpose, didBaseURL);
-    }
-
-    /**
      * Adds a DataIntegrityProof (ecdsa-rdfc-2019) using a signing provider.
      */
     public void addECDSAProofByProvider(SignerProvider signerProvider,
@@ -182,13 +162,14 @@ public class JSONMap extends HashMap<String, Object> {
         if (signerProvider == null) {
             throw new IllegalArgumentException("signerProvider cannot be null");
         }
+        requireVmAndPurpose(verificationMethod, proofPurpose);
         Object contextBackup = snapshotContext();
         try {
             ensureDataIntegrityContext();
 
             Proof proof = new Proof();
             proof.setType(DATA_INTEGRITY_PROOF);
-            proof.setCreated(Instant.now().toString());
+            proof.setCreated(com.pila.credential.common.util.Rfc3339.now());
             proof.setVerificationMethod(verificationMethod);
             proof.setProofPurpose(proofPurpose);
             proof.setCryptosuite(ECDSA_RDFC_2019);
@@ -240,13 +221,15 @@ public class JSONMap extends HashMap<String, Object> {
         if (signerProvider == null) {
             throw new IllegalArgumentException("signerProvider cannot be null");
         }
+        requireVmAndPurpose(verificationMethod, proofPurpose);
+        requireSecp256k1Key(vmPublicKey);
         Object contextBackup = snapshotContext();
         try {
             ensureSecp256k1SuiteContext();
 
             Proof proof = new Proof();
             proof.setType(ECDSA_SECP256K1_SIGNATURE_2019);
-            proof.setCreated(Instant.now().toString());
+            proof.setCreated(com.pila.credential.common.util.Rfc3339.now());
             proof.setVerificationMethod(verificationMethod);
             proof.setProofPurpose(proofPurpose);
             if (challenge != null && !challenge.isEmpty()) {
@@ -267,6 +250,7 @@ public class JSONMap extends HashMap<String, Object> {
             if (signature.length != 64) {
                 throw new IllegalArgumentException("EcdsaSecp256k1Signature2019 expects 64-byte r||s signature");
             }
+            signature = normalizeLowS(signature);
             if (vmPublicKey != null && !Crypto.verifyEcdsaRaw(vmPublicKey, signDigest, signature)) {
                 throw new Exception("signature verification failed against verification method");
             }
@@ -289,10 +273,11 @@ public class JSONMap extends HashMap<String, Object> {
     }
 
     /**
-     * Builds section 3.2.4 hashData from a document digest and proof options.
+     * Returns the 32-byte digest the external signer signs: SHA-256 of the section 3.2.4 hashData built from the
+     * document digest and the proof options.
      */
     public byte[] createProofSigning(byte[] docHash, Proof proof) throws Exception {
-        return proofHashData(docHash, proof);
+        return sha256(proofHashData(docHash, proof));
     }
 
     /**
@@ -302,7 +287,73 @@ public class JSONMap extends HashMap<String, Object> {
         if (proof == null) {
             throw new IllegalArgumentException("proof is null");
         }
+        if (DATA_INTEGRITY_PROOF.equals(proof.getType()) && ECDSA_RDFC_2019.equals(proof.getCryptosuite())
+                && (proof.getProofValue() == null || !proof.getProofValue().startsWith("z"))) {
+            throw new Exception("proofValue must be multibase base58btc (\"z\" prefix); hex proofs are no longer issued");
+        }
         appendProof(proof);
+    }
+
+    /**
+     * Verifies one proof against the document as it stands, before that proof is attached, so a proof signed over
+     * the wrong digest or by the wrong key fails where it is added. Only ecdsa-rdfc-2019 can be checked this way
+     * (the other suites bind to something the document does not carry yet). The document is not modified.
+     */
+    public void verifyDetachedProof(CredentialResolver resolver, Proof proof) throws Exception {
+        if (proof == null) {
+            throw new IllegalArgumentException("proof is null");
+        }
+        if (resolver == null) {
+            throw new IllegalArgumentException("document resolver is required");
+        }
+        if (!DATA_INTEGRITY_PROOF.equals(proof.getType()) || !ECDSA_RDFC_2019.equals(proof.getCryptosuite())) {
+            throw new Exception("a " + proof.getType() + (proof.getCryptosuite() != null ? "/" + proof.getCryptosuite() : "")
+                    + " proof cannot be checked before it is attached; only " + DATA_INTEGRITY_PROOF + "/"
+                    + ECDSA_RDFC_2019 + " can — attach it without withVerifyProof and call verify instead");
+        }
+        boolean ok = verifyOneProof(resolver, proof);
+        if (!ok) {
+            throw new Exception("the proof does not verify against verification method "
+                    + proof.getVerificationMethod() + "; it was signed by another key or over data other than this document");
+        }
+    }
+
+    /** Parsed view of every proof in the set (does not change what is stored). */
+    public List<Proof> proofs() throws Exception {
+        List<Proof> out = new ArrayList<>();
+        for (Object raw : rawProofList()) {
+            out.add(parseRawToProof(raw));
+        }
+        return out;
+    }
+
+    /** True when the first proof carries a multibase proofValue (base58btc "z" / base64url "u"). */
+    public boolean hasMultibaseProof() {
+        List<Object> list = rawProofList();
+        if (list.isEmpty() || !(list.get(0) instanceof Map<?, ?> p) || !(p.get("proofValue") instanceof String pv)) {
+            return false;
+        }
+        return pv.startsWith("z") || pv.startsWith("u");
+    }
+
+    /** Legacy canonicalizer over the whole map including proof (Go {@code CanonicalizeFull}); the identity of a legacy VC. */
+    public byte[] canonicalizeFull() throws Exception {
+        try {
+            Map<String, Object> doc = objectMapper.readValue(objectMapper.writeValueAsBytes(this),
+                    new TypeReference<Map<String, Object>>() {
+                    });
+            return Processor.computeDigest(Processor.canonicalizeDocument(doc));
+        } catch (Exception e) {
+            throw new Exception("failed to canonicalize document: " + e.getMessage(), e);
+        }
+    }
+
+    /** Library canonicalizer (Go {@code processor.Canonicalize}) over the whole map including proof, SHA-256. */
+    public byte[] canonicalizeFullNativeTypes() throws Exception {
+        Map<String, Object> doc = objectMapper.readValue(objectMapper.writeValueAsBytes(this),
+                new TypeReference<Map<String, Object>>() {
+                });
+        return Processor.computeDigest(Processor.canonicalizeDocumentNativeTypes(doc));
     }
 
     /**
@@ -318,6 +369,7 @@ public class JSONMap extends HashMap<String, Object> {
 
         @SuppressWarnings("unchecked")
         Map<String, Object> proofMap = (Map<String, Object>) proof;
+        result.setRaw(new LinkedHashMap<>(proofMap));
 
         if (proofMap.containsKey("type") && proofMap.get("type") instanceof String) {
             result.setType((String) proofMap.get("type"));
@@ -354,9 +406,8 @@ public class JSONMap extends HashMap<String, Object> {
      * Verifies an ECDSA-signed JSONMap.
      */
     public boolean verifyProof(String didBaseURL) throws Exception {
-        return verifyProof(new ChainingCredentialResolver(
-                new DidKeyP256Resolver(),
-                new VerificationMethodResolver(didBaseURL)));
+        // Default resolver is HTTP only (Go NewHTTPResolver); offline did:key is opt-in via an injected resolver.
+        return verifyProof(new VerificationMethodResolver(didBaseURL));
     }
 
     /**
@@ -407,25 +458,12 @@ public class JSONMap extends HashMap<String, Object> {
 
     private boolean verifyOneProof(CredentialResolver resolver, Proof proof) throws Exception {
         if (JWT_PROOF_2020.equals(proof.getType())) {
-            Object issuerObj = this.get("issuer");
-            if (!(issuerObj instanceof String)) {
-                throw new Exception("issuer is missing or invalid in the request");
-            }
-            String publicKey = resolver.getDefaultPublicKeyHex((String) issuerObj);
-            Map<String, Object> reqMap = new HashMap<>(this);
-            if (!Crypto.verifyJwtProof(reqMap, publicKey)) {
-                return false;
-            }
-            if (proof.getVerificationMethod() != null && !proof.getVerificationMethod().isEmpty()) {
-                String didPart = didFromVerificationMethod(proof.getVerificationMethod());
-                DIDDocument doc = resolver.resolveDocument(didPart);
-                VerificationMethodEntry vm = resolver.findVerificationMethod(proof.getVerificationMethod());
-                StrictPurposeCheck.enforce(doc, vm, "assertionMethod", proof.getCreated());
-            }
-            return true;
+            return verifyJwtProof2020(resolver, proof);
         }
-        if (ECDSA_SECP256K1_SIGNATURE_2019.equals(proof.getType())
-                || ECDSA_SECP_KEY.equals(proof.getType())) {
+        if (JSON_WEB_SIGNATURE_2020.equals(proof.getType())) {
+            return verifyJwsProof(resolver, proof);
+        }
+        if (ECDSA_SECP256K1_SIGNATURE_2019.equals(proof.getType())) {
             return verifyEcdsaSecp256k1Proof(resolver, proof);
         }
         if (DATA_INTEGRITY_PROOF.equals(proof.getType()) && ECDSA_RDFC_2019.equals(proof.getCryptosuite())) {
@@ -443,6 +481,92 @@ public class JSONMap extends HashMap<String, Object> {
             return verifyEcdsaSdProof(resolver, proof);
         }
         throw new Exception("unsupported proof type: " + proof.getType());
+    }
+
+    /**
+     * JwtProof2020 (legacy): the verification method comes from the proof (or the kid of its jws), the
+     * key from that method in the signer's DID document, and {@code proof.jwt} is checked against it.
+     */
+    private boolean verifyJwtProof2020(CredentialResolver resolver, Proof proof) throws Exception {
+        String vmUrl = jwtVerificationMethodUrl(proof);
+        String didPart = didFromVerificationMethod(vmUrl);
+        DIDDocument doc = resolver.resolveDocument(didPart);
+        VerificationMethodEntry vm = resolver.findVerificationMethod(vmUrl);
+        PublicKey publicKey = resolver.ecPublicKeyFromEntry(vm);
+        Map<String, Object> req = new HashMap<>();
+        req.put("proof", proof.getRaw() != null ? proof.getRaw() : Map.of());
+        if (!Crypto.verifyJwtProof(req, publicKey)) {
+            return false;
+        }
+        StrictPurposeCheck.enforce(doc, vm, "assertionMethod", proof.getCreated());
+        return true;
+    }
+
+    private static String jwtVerificationMethodUrl(Proof proof) throws Exception {
+        if (proof.getVerificationMethod() != null && !proof.getVerificationMethod().isEmpty()) {
+            return proof.getVerificationMethod();
+        }
+        String jws = proof.getJws();
+        int dot = jws == null ? -1 : jws.indexOf('.');
+        if (dot > 0) {
+            try {
+                Object kid = objectMapper.readValue(Base64.getUrlDecoder().decode(jws.substring(0, dot)),
+                        new TypeReference<Map<String, Object>>() {
+                        }).get("kid");
+                if (kid instanceof String k && !k.isEmpty()) {
+                    return k;
+                }
+            } catch (Exception ignored) {
+                // fall through to the missing-kid error
+            }
+        }
+        throw new Exception("token is missing verification method id (kid/verificationMethod)");
+    }
+
+    /**
+     * JsonWebSignature2020 (legacy): detached JWS with b64:false over {@code header.digest}, where the
+     * digest is the legacy document digest; ES256 against a P-256 JWK, RS/PS 256/384/512 against an RSA JWK.
+     */
+    private boolean verifyJwsProof(CredentialResolver resolver, Proof proof) throws Exception {
+        String didPart = didFromVerificationMethod(proof.getVerificationMethod());
+        DIDDocument doc = resolver.resolveDocument(didPart);
+        VerificationMethodEntry vm = resolver.findVerificationMethod(proof.getVerificationMethod());
+        if (!JSON_WEB_KEY_2020.equals(vm.getType())) {
+            throw new Exception("expected " + JSON_WEB_KEY_2020 + " VM, got " + vm.getType());
+        }
+        if (vm.getPublicKeyJwk() == null) {
+            throw new Exception("verification method '" + vm.getId() + "' has no publicKeyJwk");
+        }
+        String[] parts = proof.getJws() == null ? null : JwsDetached.splitDetachedJws(proof.getJws());
+        if (parts == null) {
+            throw new Exception("malformed detached JWS");
+        }
+        // Also enforces b64:false and crit:[b64].
+        String alg = JwsDetached.algFromEncodedHeader(parts[0]);
+
+        byte[] signingInput = JwsDetached.signingInput(parts[0], canonicalize());
+        byte[] sig;
+        try {
+            sig = Base64.getUrlDecoder().decode(parts[1]);
+        } catch (IllegalArgumentException e) {
+            throw new Exception("decode jws signature: " + e.getMessage(), e);
+        }
+        if (alg == null) {
+            alg = "";
+        }
+        switch (alg) {
+            case "ES256" -> {
+                PublicKey pub = VerificationMethodMaterial.p256PubKeyFromJwk(vm.getPublicKeyJwk());
+                if (sig.length != 64 || !Crypto.verifyEcdsaRaw(pub, sha256(signingInput), sig)) {
+                    throw new Exception("JsonWebSignature2020 ES256 signature verification failed");
+                }
+            }
+            case "RS256", "RS384", "RS512", "PS256", "PS384", "PS512" -> Crypto.verifyRsaJws(alg,
+                    VerificationMethodMaterial.rsaPubKeyFromJwk(vm.getPublicKeyJwk()), signingInput, sig);
+            default -> throw new Exception("unsupported JsonWebSignature2020 alg: \"" + alg + "\"");
+        }
+        StrictPurposeCheck.enforce(doc, vm, proof.getProofPurpose(), proof.getCreated());
+        return true;
     }
 
     private boolean verifyEcdsaSdProof(CredentialResolver resolver, Proof proof) throws Exception {
@@ -479,7 +603,7 @@ public class JSONMap extends HashMap<String, Object> {
             Proof proof = new Proof();
             proof.setType(DATA_INTEGRITY_PROOF);
             proof.setCryptosuite(ECDSA_SD_2023);
-            proof.setCreated(Instant.now().toString());
+            proof.setCreated(com.pila.credential.common.util.Rfc3339.now());
             proof.setVerificationMethod(verificationMethod);
             proof.setProofPurpose(proofPurpose);
             Map<String, Object> docNoProof = bodyWithoutProof();
@@ -506,40 +630,26 @@ public class JSONMap extends HashMap<String, Object> {
         EcdsaSd.DeriveResult derived = EcdsaSd.deriveProofPair(docNoProof, baseProof.getProofValue(),
                 selectivePointers);
         JSONMap out = new JSONMap(derived.revealDoc());
-        Proof derivedProof = new Proof();
-        derivedProof.setType(baseProof.getType());
-        derivedProof.setCryptosuite(baseProof.getCryptosuite());
-        derivedProof.setCreated(baseProof.getCreated());
-        derivedProof.setVerificationMethod(baseProof.getVerificationMethod());
-        derivedProof.setProofPurpose(baseProof.getProofPurpose());
-        derivedProof.setProofValue(derived.proofValue());
-        out.addCustomProof(derivedProof);
+        // The derived proof is the base proof with a new proofValue: every other property stays, as
+        // the proof configuration it was signed over covers all of them.
+        Map<String, Object> derivedProof = new LinkedHashMap<>(baseProof.getRaw());
+        derivedProof.put("proofValue", derived.proofValue());
+        out.put("proof", derivedProof);
         return out;
     }
 
     Map<String, Object> ecdsaSdProofConfig(Proof proof) throws Exception {
-        Object ctx = this.get("@context");
-        if (ctx == null) {
-            throw new Exception("document is missing the @context needed to canonicalize the proof configuration");
-        }
-        Map<String, Object> cfg = new LinkedHashMap<>();
-        cfg.put("type", proof.getType());
-        cfg.put("created", proof.getCreated());
-        cfg.put("verificationMethod", proof.getVerificationMethod());
-        cfg.put("proofPurpose", proof.getProofPurpose());
-        cfg.put("@context", ctx);
-        if (proof.getCryptosuite() != null) {
-            cfg.put("cryptosuite", proof.getCryptosuite());
-        }
-        return cfg;
+        return ecdsaProofConfig(proof);
     }
 
+    /** Go's didFromVMURL: the DID of a "did:..." URL, up to an optional '#'. */
     private static String didFromVerificationMethod(String verificationMethodURL) throws Exception {
-        int hashIndex = verificationMethodURL.indexOf('#');
-        if (hashIndex <= 0) {
-            throw new Exception("verification method " + verificationMethodURL + " is not a DID URL");
+        if (verificationMethodURL == null || !verificationMethodURL.startsWith("did:")) {
+            throw new Exception("proof verificationMethod \"" + verificationMethodURL
+                    + "\" is not a DID URL; it must name a key in the signer's DID document");
         }
-        return verificationMethodURL.substring(0, hashIndex);
+        int hashIndex = verificationMethodURL.indexOf('#');
+        return hashIndex > 0 ? verificationMethodURL.substring(0, hashIndex) : verificationMethodURL;
     }
 
     /**
@@ -547,17 +657,31 @@ public class JSONMap extends HashMap<String, Object> {
      */
     private boolean verifyECDSA(PublicKey publicKey, Proof proof) throws Exception {
         if (proof.getProofValue() != null && proof.getProofValue().startsWith("z")) {
+            // Only the P-256 profile of ecdsa-rdfc-2019 exists; a secp256k1 or P-384 key is refused up front.
+            if (!isP256(publicKey)) {
+                throw new Exception("ecdsa-rdfc-2019: verification method \"" + proof.getVerificationMethod()
+                        + "\" does not use a P-256 key, but this SDK supports P-256 only");
+            }
             byte[] signature = Multibase.decodeBase58Btc(proof.getProofValue());
             if (signature.length != 64) {
-                return false;
+                throw new Exception("ecdsa-rdfc-2019 proofValue decodes to " + signature.length
+                        + " bytes, want 64 (r||s)");
             }
             byte[] hashData = ecdsaHashData(proof);
             byte[] digest = sha256(hashData);
             return Crypto.verifyEcdsaRaw(publicKey, digest, signature);
         }
-        // Legacy hex proofValue (document body only).
+        // Legacy hex proofValue (document body only), any curve.
         byte[] doc = legacyDocumentDigest();
-        return Crypto.ecdsaVerifySignature(publicKeyToHex(publicKey), proof.getProofValue(), doc);
+        return proof.getProofValue() != null && Crypto.verifyEcdsaHex(publicKey, proof.getProofValue(), doc);
+    }
+
+    private static boolean isP256(PublicKey key) {
+        if (key instanceof java.security.interfaces.ECPublicKey ec) {
+            return ec.getParams().getOrder().equals(
+                    CustomNamedCurves.getByName("secp256r1").getN());
+        }
+        return false;
     }
 
     private boolean verifyEcdsaSecp256k1Proof(CredentialResolver resolver, Proof proof) throws Exception {
@@ -583,9 +707,6 @@ public class JSONMap extends HashMap<String, Object> {
         byte[] signingInput = JwsDetached.signingInput(parts[0], hashData);
         byte[] digest = sha256(signingInput);
         byte[] signature = JwsDetached.decodeCanonicalSignature(parts[1]);
-        if (signature.length == 65) {
-            signature = Arrays.copyOf(signature, 64);
-        }
         if (signature.length != 64) {
             throw new Exception(ECDSA_SECP256K1_SIGNATURE_2019 + ": jws signature is " + signature.length
                     + " bytes, want 64 (r||s)");
@@ -604,12 +725,33 @@ public class JSONMap extends HashMap<String, Object> {
     }
 
     private void appendProof(Proof proof) throws Exception {
-        List<Proof> merged = new ArrayList<>();
-        for (Object raw : rawProofList()) {
-            merged.add(parseRawToProof(raw));
+        List<Object> merged = new ArrayList<>(rawProofList());
+        merged.add(proofToMap(proof));
+        this.put("proof", merged.size() == 1 ? merged.get(0) : merged);
+    }
+
+    /** The proof as it is written to the document: every parsed property when known, else the typed fields. */
+    private static Map<String, Object> proofToMap(Proof proof) {
+        if (proof.getRaw() != null) {
+            return new LinkedHashMap<>(proof.getRaw());
         }
-        merged.add(proof);
-        this.put("proof", VCUtil.serializeProofs(merged));
+        Map<String, Object> m = new LinkedHashMap<>();
+        putIfNotEmpty(m, "type", proof.getType());
+        putIfNotEmpty(m, "created", proof.getCreated());
+        putIfNotEmpty(m, "verificationMethod", proof.getVerificationMethod());
+        putIfNotEmpty(m, "proofPurpose", proof.getProofPurpose());
+        putIfNotEmpty(m, "proofValue", proof.getProofValue());
+        putIfNotEmpty(m, "jws", proof.getJws());
+        putIfNotEmpty(m, "cryptosuite", proof.getCryptosuite());
+        putIfNotEmpty(m, "challenge", proof.getChallenge());
+        putIfNotEmpty(m, "domain", proof.getDomain());
+        return m;
+    }
+
+    private static void putIfNotEmpty(Map<String, Object> m, String k, String v) {
+        if (v != null && !v.isEmpty()) {
+            m.put(k, v);
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -661,15 +803,44 @@ public class JSONMap extends HashMap<String, Object> {
         return hashData;
     }
 
-    @SuppressWarnings("unchecked")
+    /**
+     * Proof configuration (Data Integrity 3.2.5): the whole proof minus the one field that holds
+     * its signature, plus the document's {@code @context}. Nothing else is filtered, so options the
+     * signer set (id, expires, nonce, previousProof, array domain, ...) are all hashed.
+     */
     Map<String, Object> ecdsaProofConfig(Proof proof) throws Exception {
-        Map<String, Object> cfg = objectMapper.convertValue(proof, Map.class);
-        String sigField = ECDSA_SECP256K1_SIGNATURE_2019.equals(proof.getType()) ? "jws" : "proofValue";
-        cfg.remove(sigField);
-        cfg.put("@context", this.get("@context"));
-        byte[] normalized = objectMapper.writeValueAsBytes(cfg);
-        return objectMapper.readValue(normalized, new TypeReference<Map<String, Object>>() {
+        if (proof == null) {
+            throw new IllegalArgumentException("proof is null");
+        }
+        Object ctx = this.get("@context");
+        if (ctx == null) {
+            throw new Exception("document is missing the @context needed to canonicalize the proof configuration");
+        }
+        Map<String, Object> cfg = new LinkedHashMap<>();
+        if (proof.getRaw() != null) {
+            cfg.putAll(proof.getRaw());
+        } else {
+            putIfSet(cfg, "type", proof.getType());
+            putIfSet(cfg, "created", proof.getCreated());
+            putIfSet(cfg, "verificationMethod", proof.getVerificationMethod());
+            putIfSet(cfg, "proofPurpose", proof.getProofPurpose());
+            putIfSet(cfg, "cryptosuite", proof.getCryptosuite());
+            putIfSet(cfg, "challenge", proof.getChallenge());
+            putIfSet(cfg, "domain", proof.getDomain());
+            putIfSet(cfg, "proofValue", proof.getProofValue());
+            putIfSet(cfg, "jws", proof.getJws());
+        }
+        cfg.remove(ECDSA_SECP256K1_SIGNATURE_2019.equals(proof.getType()) ? "jws" : "proofValue");
+        cfg.put("@context", ctx);
+        // JSON round trip: plain JSON types, and a copy so the document's own @context is untouched.
+        return objectMapper.readValue(objectMapper.writeValueAsBytes(cfg), new TypeReference<Map<String, Object>>() {
         });
+    }
+
+    private static void putIfSet(Map<String, Object> m, String k, String v) {
+        if (v != null && !v.isEmpty()) {
+            m.put(k, v);
+        }
     }
 
     private Map<String, Object> bodyWithoutProof() {
@@ -703,27 +874,66 @@ public class JSONMap extends HashMap<String, Object> {
             List<Object> next = new ArrayList<>(list);
             next.add(DATA_INTEGRITY_V2_CONTEXT);
             this.put("@context", next);
+            return;
+        }
+        if (ctx instanceof Map<?, ?>) {
+            // A bare inline context object defines no proof terms.
+            this.put("@context", new ArrayList<>(List.of(ctx, DATA_INTEGRITY_V2_CONTEXT)));
         }
     }
 
-    private void ensureSecp256k1SuiteContext() {
+    /**
+     * Makes {@code @context} define EcdsaSecp256k1Signature2019 (Go's
+     * {@code addSuiteContextWithoutChangingMeaning}) and refuses when adding the suite context changed
+     * what the document says: it defines {@code proof} at the root, so a term of that name used
+     * elsewhere is redefined and the issuer would sign something other than what it built.
+     */
+    private void ensureSecp256k1SuiteContext() throws Exception {
+        if (definesSecp256k1Suite()) {
+            return;
+        }
+        byte[] before = documentDigest();
         Object ctx = this.get("@context");
         if (ctx instanceof String s) {
-            if (!coversSecp256k1Suite(s)) {
-                this.put("@context", List.of(s, SECP256K1_SUITE_CONTEXT));
-            }
-            return;
+            this.put("@context", new ArrayList<>(List.of(s, SECP256K1_SUITE_CONTEXT)));
+        } else if (ctx instanceof List<?> list) {
+            List<Object> next = new ArrayList<>(list);
+            next.add(SECP256K1_SUITE_CONTEXT);
+            this.put("@context", next);
+        } else if (ctx == null) {
+            throw new Exception("document has no @context, so " + ECDSA_SECP256K1_SIGNATURE_2019
+                    + " cannot be expanded; add " + SECP256K1_SUITE_CONTEXT + " yourself");
+        } else {
+            throw new Exception("document @context has unexpected type " + ctx.getClass().getName());
+        }
+        byte[] after;
+        try {
+            after = documentDigest();
+        } catch (Exception e) {
+            throw new Exception("adding " + SECP256K1_SUITE_CONTEXT + ", which " + ECDSA_SECP256K1_SIGNATURE_2019
+                    + " needs, stopped the document from canonicalizing; a term it defines collides with one this"
+                    + " document uses: " + e.getMessage(), e);
+        }
+        if (!Arrays.equals(before, after)) {
+            throw new Exception("adding " + SECP256K1_SUITE_CONTEXT + ", which " + ECDSA_SECP256K1_SIGNATURE_2019
+                    + " needs, changed what the document says; it defines proof at the root, so a term of that"
+                    + " name used elsewhere in this document is redefined");
+        }
+    }
+
+    private boolean definesSecp256k1Suite() {
+        Object ctx = this.get("@context");
+        if (ctx instanceof String s) {
+            return coversSecp256k1Suite(s);
         }
         if (ctx instanceof List<?> list) {
             for (Object e : list) {
                 if (e instanceof String s && coversSecp256k1Suite(s)) {
-                    return;
+                    return true;
                 }
             }
-            List<Object> next = new ArrayList<>(list);
-            next.add(SECP256K1_SUITE_CONTEXT);
-            this.put("@context", next);
         }
+        return false;
     }
 
     private static boolean coversDataIntegrity(String s) {
@@ -732,7 +942,43 @@ public class JSONMap extends HashMap<String, Object> {
 
     private static boolean coversSecp256k1Suite(String s) {
         return SECP256K1_SUITE_CONTEXT.equals(s) || "https://w3id.org/security/v2".equals(s)
-                || "https://www.w3.org/2018/credentials/v1".equals(s);
+                || "https://www.w3.org/2018/credentials/v1".equals(s)
+                || "https://www.w3.org/2018/credentials/v1.jsonld".equals(s);
+    }
+
+    private static void requireVmAndPurpose(String verificationMethod, String proofPurpose) {
+        if (verificationMethod == null || verificationMethod.isEmpty()) {
+            throw new IllegalArgumentException("jsonmap: verification method is required");
+        }
+        if (proofPurpose == null || proofPurpose.isEmpty()) {
+            throw new IllegalArgumentException("jsonmap: proof purpose is required");
+        }
+    }
+
+    /** The secp256k1 suite signs with the VM key; refuse a key on another curve before any signing happens. */
+    private static void requireSecp256k1Key(PublicKey vmPublicKey) throws Exception {
+        if (vmPublicKey == null) {
+            return;
+        }
+        BigInteger want = CustomNamedCurves.getByName("secp256k1").getN();
+        if (!(vmPublicKey instanceof ECPublicKey ec) || !want.equals(ec.getParameters().getN())) {
+            throw new Exception(ECDSA_SECP256K1_SIGNATURE_2019 + " requires a secp256k1 verification method key");
+        }
+    }
+
+    /** Folds a signature into the lower half of the curve order (verifiers reject high-S). */
+    private static byte[] normalizeLowS(byte[] sig64) {
+        BigInteger n = CustomNamedCurves.getByName("secp256k1").getN();
+        BigInteger s = new BigInteger(1, Arrays.copyOfRange(sig64, 32, 64));
+        if (s.compareTo(n.shiftRight(1)) <= 0) {
+            return sig64;
+        }
+        byte[] folded = n.subtract(s).toByteArray();
+        byte[] out = sig64.clone();
+        Arrays.fill(out, 32, 64, (byte) 0);
+        int len = Math.min(folded.length, 32);
+        System.arraycopy(folded, folded.length - len, out, 64 - len, len);
+        return out;
     }
 
     private Object snapshotContext() {

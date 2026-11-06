@@ -1,6 +1,7 @@
 package com.pila.credential.common.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -41,4 +42,12 @@ public class Proof {
     private String domain;
 
     private byte[] signature;
+
+    /**
+     * Every property of the proof object this was parsed from, in document order. The proof
+     * configuration is the whole proof minus its signature field (Data Integrity 4.4), so
+     * verification hashes this, not the typed fields. Null for a proof built in code.
+     */
+    @JsonIgnore
+    private java.util.Map<String, Object> raw;
 }

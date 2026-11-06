@@ -1,5 +1,6 @@
 package com.pila.credential.vc;
 
+import com.pila.credential.common.util.Rfc3339;
 import com.pila.credential.common.util.VCUtil;
 
 import java.time.Instant;
@@ -53,18 +54,72 @@ public class CredentialHelper {
         }
 
         if (vcc.getCredentialStatus() != null && !vcc.getCredentialStatus().isEmpty()) {
+            for (int i = 0; i < vcc.getCredentialStatus().size(); i++) {
+                String type = vcc.getCredentialStatus().get(i).getType();
+                if (type == null || type.isEmpty()) {
+                    throw new IllegalArgumentException("credentialStatus[" + i + "].type is required");
+                }
+            }
             vcJSON.put("credentialStatus", serializeStatuses(vcc.getCredentialStatus()));
         }
 
+        if (vcc.getTermsOfUse() != null && !vcc.getTermsOfUse().isEmpty()) {
+            List<Object> terms = new ArrayList<>();
+            for (int i = 0; i < vcc.getTermsOfUse().size(); i++) {
+                TermsOfUse t = vcc.getTermsOfUse().get(i);
+                if (t.getType() == null || t.getType().isEmpty()) {
+                    throw new IllegalArgumentException("termsOfUse[" + i + "].type is required");
+                }
+                terms.add(serializeTermsOfUse(t));
+            }
+            vcJSON.put("termsOfUse", terms);
+        }
+
         if (vcc.getValidFrom() != null) {
-            vcJSON.put("validFrom", vcc.getValidFrom().toString());
+            vcJSON.put("validFrom", Rfc3339.format(vcc.getValidFrom()));
         }
 
         if (vcc.getValidUntil() != null) {
-            vcJSON.put("validUntil", vcc.getValidUntil().toString());
+            vcJSON.put("validUntil", Rfc3339.format(vcc.getValidUntil()));
         }
 
+        // Shared by every credential type, so all of them reject a credential missing a required property.
+        CredentialSupport.requireCredentialProperties(vcJSON);
+
         return vcJSON;
+    }
+
+    /** Type is required by the W3C data model, so it is always written. */
+    public static CredentialData serializeTermsOfUse(TermsOfUse term) {
+        CredentialData result = new CredentialData();
+        result.put("type", term.getType());
+        if (term.getId() != null && !term.getId().isEmpty()) {
+            result.put("id", term.getId());
+        }
+        return result;
+    }
+
+    /** Parses termsOfUse (single object or array). */
+    public static void parseTermsOfUse(CredentialData c, CredentialContents contents) throws Exception {
+        Object raw = c.get("termsOfUse");
+        if (raw == null) {
+            return;
+        }
+        List<Object> items = raw instanceof List<?> l ? new ArrayList<>(l) : List.of(raw);
+        for (Object item : items) {
+            if (!(item instanceof Map<?, ?> m)) {
+                throw new Exception("unsupported termsOfUse format: "
+                        + (item != null ? item.getClass().getName() : "null"));
+            }
+            TermsOfUse t = new TermsOfUse();
+            if (m.get("id") instanceof String id) {
+                t.setId(id);
+            }
+            if (m.get("type") instanceof String type) {
+                t.setType(type);
+            }
+            contents.getTermsOfUse().add(t);
+        }
     }
 
     /**
@@ -216,7 +271,7 @@ public class CredentialHelper {
         Object validFromObj = c.get("validFrom");
         if (validFromObj instanceof String) {
             try {
-                contents.setValidFrom(Instant.parse((String) validFromObj));
+                contents.setValidFrom(Rfc3339.parse((String) validFromObj));
             } catch (Exception e) {
                 throw new Exception("failed to parse validFrom: " + e.getMessage(), e);
             }
@@ -225,7 +280,7 @@ public class CredentialHelper {
         Object validUntilObj = c.get("validUntil");
         if (validUntilObj instanceof String) {
             try {
-                contents.setValidUntil(Instant.parse((String) validUntilObj));
+                contents.setValidUntil(Rfc3339.parse((String) validUntilObj));
             } catch (Exception e) {
                 throw new Exception("failed to parse validUntil: " + e.getMessage(), e);
             }
@@ -401,10 +456,11 @@ public class CredentialHelper {
     }
 
     /**
-     * Validates a credential (bypassed - throws UnsupportedOperationException).
+     * Validates a credential against every credentialSchema it names (JSON Schema draft-07 core; see
+     * {@link com.pila.credential.common.schema.JsonSchemaValidator}).
      */
-    public static void validateCredential(CredentialData m) throws Exception {
-        throw new UnsupportedOperationException("Schema validation is not yet implemented");
+    public static void validateCredential(CredentialData m, CredentialOptions opts) throws Exception {
+        CredentialSupport.validateSchema(m, opts);
     }
 
     /**

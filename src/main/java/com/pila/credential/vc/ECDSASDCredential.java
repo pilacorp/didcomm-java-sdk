@@ -1,8 +1,8 @@
 package com.pila.credential.vc;
 
 import com.pila.credential.common.jsonmap.JSONMap;
-import com.pila.credential.common.signer.P256SignerProvider;
 import com.pila.credential.common.signer.SignerProvider;
+import com.pila.credential.common.util.Vcdm;
 import com.pila.credential.common.verificationmethod.CredentialResolver;
 import com.pila.credential.common.verificationmethod.ResolveVmUrl;
 import com.pila.credential.common.verificationmethod.VerificationMethodEntry;
@@ -21,12 +21,29 @@ public final class ECDSASDCredential implements Credential {
         this.base = base;
     }
 
+    public static ECDSASDCredential newECDSASDCredential(CredentialContents vcc, CredentialOptions opts)
+            throws Exception {
+        return newCredential(vcc, opts);
+    }
+
+    public static ECDSASDCredential parseECDSASDCredential(byte[] rawJSON, CredentialOptions opts) throws Exception {
+        return parse(rawJSON, opts);
+    }
+
     public static ECDSASDCredential newCredential(CredentialContents vcc) throws Exception {
-        return new ECDSASDCredential(JSONCredential.newJSONCredential(vcc));
+        return newCredential(vcc, null);
+    }
+
+    public static ECDSASDCredential newCredential(CredentialContents vcc, CredentialOptions opts) throws Exception {
+        return new ECDSASDCredential(JSONCredential.newJSONCredential(vcc, opts));
     }
 
     public static ECDSASDCredential parse(byte[] rawJSON) throws Exception {
-        return new ECDSASDCredential(JSONCredential.parseJSONCredential(rawJSON));
+        return parse(rawJSON, null);
+    }
+
+    public static ECDSASDCredential parse(byte[] rawJSON, CredentialOptions opts) throws Exception {
+        return new ECDSASDCredential(JSONCredential.parseJSONCredential(rawJSON, opts));
     }
 
     public static List<String> dotPathsToPointers(List<String> paths) {
@@ -44,23 +61,37 @@ public final class ECDSASDCredential implements Credential {
     }
 
     public void addProofByProvider(SignerProvider signerProvider, List<String> mandatoryPaths) throws Exception {
-        if (!(signerProvider instanceof P256SignerProvider)) {
-            throw new Exception("unsupported key kind for ecdsa-sd-2023 credential");
+        addProofByProvider(signerProvider, mandatoryPaths, null);
+    }
+
+    /**
+     * Signs the credential into an ecdsa-sd-2023 base proof; mandatoryPaths are always disclosed. The proof is
+     * bound to the VM {@code withVerificationMethodKey} pins (default: latest active assertionMethod VM), which
+     * must hold a P-256 key; any P-256 provider works.
+     */
+    public void addProofByProvider(SignerProvider signerProvider, List<String> mandatoryPaths,
+            CredentialOptions opts) throws Exception {
+        if (signerProvider == null) {
+            throw new IllegalArgumentException("signer provider cannot be null");
         }
-        JSONMap data = (JSONMap) base.getCredentialData();
-        Object issuerObj = data.get("issuer");
-        if (!(issuerObj instanceof String issuer) || issuer.isBlank()) {
+        CredentialOptions o = CredentialOptions.orEmpty(opts);
+        CredentialSupport.refuseReplaceOnJSONLD(o);
+        JSONMap data = base.getCredentialData();
+        base.executeOptionsForSigning(o);
+        String issuer = Vcdm.didFromField(data.get("issuer"));
+        if (issuer == null) {
             throw new Exception("issuer is missing or invalid");
         }
-        CredentialResolver resolver = CredentialConfig.getDocumentResolver();
-        var signing = ResolveVmUrl.resolveSigningVM(issuer, "assertionMethod", base.getVerificationMethod(), resolver);
+        CredentialResolver resolver = o.effectiveResolver();
+        var signing = ResolveVmUrl.resolveSigningVM(issuer, "assertionMethod", o.getVerificationMethodKey(), resolver);
         VerificationMethodEntry vm = signing.vm();
-        if (VerificationMethodKeyKind.fromEntry(vm) != VerificationMethodKeyKind.P256) {
-            throw new Exception("ecdsa-sd-2023 requires a P-256 verification method");
+        VerificationMethodKeyKind kind = VerificationMethodKeyKind.fromEntry(vm);
+        if (kind != VerificationMethodKeyKind.P256) {
+            throw new Exception("unsupported key kind " + kind + " for ecdsa-sd-2023 credential");
         }
         PublicKey vmPub = resolver.ecPublicKeyFromEntry(vm);
-        data.addECDSASDBaseProof(signerProvider, signing.url(), "assertionMethod", dotPathsToPointers(mandatoryPaths),
-                vmPub);
+        data.addECDSASDBaseProof(signerProvider, signing.url(), "assertionMethod",
+                dotPathsToPointers(mandatoryPaths == null ? List.of() : mandatoryPaths), vmPub);
     }
 
     public JSONCredential derive(List<String> selectivePaths) throws Exception {
@@ -69,38 +100,18 @@ public final class ECDSASDCredential implements Credential {
     }
 
     @Override
-    public void addProof(String privKeyHex) throws Exception {
-        addProofByProvider(new P256SignerProvider(privKeyHex), List.of());
-    }
-
-    @Override
-    public void addProofByProvider(SignerProvider signerProvider) throws Exception {
-        addProofByProvider(signerProvider, List.of());
-    }
-
-    @Override
-    public byte[] getSigningInput() throws Exception {
-        return base.getSigningInput();
-    }
-
-    @Override
-    public byte[] createProofSigning(byte[] docHash, com.pila.credential.common.dto.Proof proof) throws Exception {
-        return base.createProofSigning(docHash, proof);
-    }
-
-    @Override
-    public void addCustomProof(com.pila.credential.common.dto.Proof proof) throws Exception {
-        base.addCustomProof(proof);
-    }
-
-    @Override
-    public void verify() throws Exception {
-        base.verify();
+    public void verify(CredentialOptions opts) throws Exception {
+        base.verify(opts);
     }
 
     @Override
     public Object serialize() throws Exception {
         return base.serialize();
+    }
+
+    @Override
+    public String hash() throws Exception {
+        return base.hash();
     }
 
     @Override
@@ -111,6 +122,11 @@ public final class ECDSASDCredential implements Credential {
     @Override
     public String getType() {
         return base.getType();
+    }
+
+    @Override
+    public Object extractField(String path) {
+        return base.extractField(path);
     }
 
     public JSONCredential getBase() {

@@ -45,6 +45,12 @@ public final class Merkle {
     }
 
     public static boolean verifyProof(byte[] leaf, List<byte[]> path, byte[] root) {
+        // Go takes [32]byte values; a wrong-size input has no Go equivalent and is refused, not padded or cut
+        require32(leaf, "leaf");
+        require32(root, "root");
+        for (byte[] sibling : path) {
+            require32(sibling, "sibling");
+        }
         if (path.size() > MAX_PROOF_LEN) {
             return false;
         }
@@ -56,11 +62,18 @@ public final class Merkle {
     }
 
     public static byte[] revokedLeaf(String addr) {
-        byte[] a = Hex.decode(addr);
-        if (a.length != 20) {
-            a = Hex.toFixed(a, 20);
+        if (!com.pila.credential.didv2.Issuer.isAddress(addr)) {
+            throw new IllegalArgumentException("subdid: " + addr + " is not a 20-byte address");
         }
+        byte[] a = Hex.decode(addr);
         return Keccak256.hash(REVOKED_TAG, a);
+    }
+
+    private static void require32(byte[] b, String what) {
+        if (b == null || b.length != 32) {
+            throw new IllegalArgumentException("subdid: " + what + " is " + (b == null ? 0 : b.length)
+                    + " bytes, want 32");
+        }
     }
 
     private static void checkLeafCount(int n) throws Exception {

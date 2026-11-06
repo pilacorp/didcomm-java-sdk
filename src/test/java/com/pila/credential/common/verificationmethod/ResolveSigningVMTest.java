@@ -45,16 +45,16 @@ public class ResolveSigningVMTest {
     }
 
     @Test
-    void rejectsHardRevocationReasonWithoutTimestamp() {
+    void hardRevocationReasonWithoutTimestampIsNotCheckedAtSigning() throws Exception {
+        // Go ResolveSigningVM rejects only on `revoked`; the hard reason is a verify-time rule.
         DIDDocument hard = new DIDDocument();
         hard.setId(DID);
         VerificationMethodEntry k1 = vm(DID + "#key-1");
         k1.setRevocationReason("keyCompromise");
         hard.setVerificationMethod(new ArrayList<>(List.of(k1)));
         hard.setAssertionMethod(new ArrayList<>(List.of(DID + "#key-1")));
-        Exception ex = assertThrows(Exception.class,
-                () -> ResolveVmUrl.resolveSigningVM(DID, "assertionMethod", "key-1", stub(hard)));
-        assertTrue(ex.getMessage().contains("hard reason 'keyCompromise'"));
+        assertEquals(DID + "#key-1",
+                ResolveVmUrl.resolveSigningVM(DID, "assertionMethod", "key-1", stub(hard)).url());
     }
 
     @Test

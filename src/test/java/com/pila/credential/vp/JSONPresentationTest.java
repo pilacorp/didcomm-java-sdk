@@ -39,6 +39,9 @@ public class JSONPresentationTest {
 
             CredentialContents vcContents = new CredentialContents();
             vcContents.setIssuer(holderDid);
+            vcContents.setSubject(java.util.List.of(new com.pila.credential.vc.Subject("did:example:subject", new java.util.HashMap<>())));
+            vcContents.setContext(java.util.List.of("https://www.w3.org/ns/credentials/v2"));
+            vcContents.setTypes(java.util.List.of("VerifiableCredential"));
             vcContents.setValidFrom(Instant.now());
             JSONCredential vc = JSONCredential.newJSONCredential(vcContents);
             vc.addProofByProvider(new DefaultSignerProvider(privKeyHex));
@@ -69,8 +72,13 @@ public class JSONPresentationTest {
                     .withExpectedDomain("https://verifier.example"));
             org.junit.jupiter.api.Assertions.assertThrows(Exception.class,
                     () -> bound.verify(new PresentationOptions().withExpectedChallenge("wrong")));
+            // JSON-LD always appends to the proof set (Go): a second signature is a second proof, and
+            // withReplaceProof is refused rather than silently appending.
             org.junit.jupiter.api.Assertions.assertThrows(Exception.class,
-                    () -> bound.addProofByProvider(new DefaultSignerProvider(privKeyHex)));
+                    () -> bound.addProofByProvider(new DefaultSignerProvider(privKeyHex),
+                            new PresentationOptions().withReplaceProof()));
+            bound.addProofByProvider(new DefaultSignerProvider(privKeyHex));
+            org.junit.jupiter.api.Assertions.assertEquals(2, ((java.util.List<?>) bound.serialize().get("proof")).size());
         } finally {
             server.stop(0);
         }

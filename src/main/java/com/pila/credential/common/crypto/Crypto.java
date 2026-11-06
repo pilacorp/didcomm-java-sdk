@@ -6,9 +6,9 @@ import org.bouncycastle.util.encoders.Hex;
 
 import java.math.BigInteger;
 import java.security.KeyFactory;
+import java.security.MessageDigest;
 import java.security.PublicKey;
 import java.security.Security;
-import java.security.PublicKey;
 import java.security.Signature;
 import org.bouncycastle.jce.ECNamedCurveTable;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
@@ -79,28 +79,26 @@ public class Crypto {
             KeyFactory kf = KeyFactory.getInstance("EC", "BC");
             PublicKey publicKey = kf.generatePublic(new org.bouncycastle.jce.spec.ECPublicKeySpec(point, CURVE_SPEC));
 
-            // 4. Decode signature
-            byte[] signature = Hex.decode(signatureHex);
-
-            // if signature is 65 bytes
-            if (signature.length == 65) {
-                signature = extract(signature, 0, 64);
-            }
-
-            // Convert raw R||S → DER if needed
-            if (!isDer(signature)) {
-                signature = rawToDer(signature);
-            }
-
-            // 5. Verify signature using SHA-256 + ECDSA
-            Signature verifier = Signature.getInstance("NONEwithECDSA", "BC");
-            verifier.initVerify(publicKey);
-            verifier.update(message);
-            return verifier.verify(signature);
+            // 4. Hex signature, 64 (r||s) or 65 (r||s||v) bytes; no DER (Go ECDSAVerifySignature).
+            return verifyEcdsaHex(publicKey, signatureHex, message);
 
         } catch (Exception e) {
-            System.out.println(e.getMessage());
-            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
+     * Go's {@code ECDSAVerifySignature}: a hex signature of exactly 64 or 65 bytes (the recovery byte
+     * is dropped) checked over the digest on the key's own curve.
+     */
+    public static boolean verifyEcdsaHex(java.security.PublicKey publicKey, String signatureHex, byte[] digest32) {
+        try {
+            byte[] sig = Hex.decode(signatureHex);
+            if (sig.length == 65) {
+                sig = extract(sig, 0, 64);
+            }
+            return sig.length == 64 && verifyEcdsaRaw(publicKey, digest32, sig);
+        } catch (Exception e) {
             return false;
         }
     }
@@ -125,16 +123,176 @@ public class Crypto {
     }
 
     /**
-     * Verifies a JWT proof.
-     * 
-     * @param req          The request map containing the proof
-     * @param publicKeyHex The public key in hex format
-     * @return true if JWT proof is valid
+     * Go's {@code VerifyJwtProof}: verifies {@code req.proof.jwt} (a secp256k1 JWT) against {@code pub}.
+     * A 65-byte signature must recover to {@code pub}; a 64-byte one must verify under it and be low-S.
+     *
+     * @throws Exception when the token is missing or malformed (Go returns an error)
      */
-    public static boolean verifyJwtProof(Map<String, Object> req, String publicKeyHex) throws Exception {
-        // TODO: Implement JWT proof verification
-        throw new UnsupportedOperationException(
-                "JWT proof verification not yet implemented.");
+    public static boolean verifyJwtProof(Map<String, Object> req, java.security.PublicKey pub) throws Exception {
+        Object proof = req.get("proof");
+        Object jwt = proof instanceof Map<?, ?> m ? m.get("jwt") : null;
+        if (!(jwt instanceof String token) || token.isEmpty()) {
+            throw new Exception("JWT token is missing");
+        }
+        if (pub == null) {
+            throw new Exception("public key is nil");
+        }
+        String[] parts = token.split("\\.", -1);
+        if (parts.length != 3) {
+            throw new Exception("failed to extract signature and message from JWT: invalid JWT format");
+        }
+        if (parts[2].indexOf('=') >= 0) {
+            throw new Exception("failed to extract signature and message from JWT: failed to decode signature");
+        }
+        byte[] signature;
+        try {
+            signature = java.util.Base64.getUrlDecoder().decode(parts[2]);
+        } catch (IllegalArgumentException e) {
+            throw new Exception("failed to extract signature and message from JWT: failed to decode signature", e);
+        }
+        byte[] message = (parts[0] + "." + parts[1]).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        if (!(pub instanceof org.bouncycastle.jce.interfaces.ECPublicKey ec) || !isSecp256k1(ec)) {
+            return false;
+        }
+        byte[] compressed = ec.getQ().getEncoded(true);
+        byte[] hash = java.security.MessageDigest.getInstance("SHA-256").digest(message);
+        if (signature.length == 65) {
+            byte[] recovered = recoverCompressed(hash, signature);
+            return recovered != null && java.util.Arrays.equals(recovered, compressed);
+        }
+        if (signature.length != 64 || message.length == 0) {
+            return false;
+        }
+        // libsecp256k1 verify (go-ethereum VerifySignature) rejects a high-S signature.
+        BigInteger s = new BigInteger(1, extract(signature, 32, 32));
+        if (s.compareTo(CURVE_SPEC.getN().shiftRight(1)) > 0) {
+            return false;
+        }
+        return verifyEcdsaRaw(pub, hash, signature);
+    }
+
+    private static boolean isSecp256k1(org.bouncycastle.jce.interfaces.ECPublicKey k) {
+        return k.getParameters().getN().equals(CURVE_SPEC.getN())
+                && k.getParameters().getCurve().equals(CURVE_SPEC.getCurve());
+    }
+
+    /** go-ethereum {@code Ecrecover}: the compressed public key a 65-byte r||s||v signature recovers to, or null. */
+    private static byte[] recoverCompressed(byte[] hash, byte[] sig65) {
+        try {
+            BigInteger n = CURVE_SPEC.getN();
+            BigInteger r = new BigInteger(1, extract(sig65, 0, 32));
+            BigInteger s = new BigInteger(1, extract(sig65, 32, 32));
+            int v = sig65[64] & 0xff;
+            if (v > 3 || r.signum() == 0 || s.signum() == 0 || r.compareTo(n) >= 0 || s.compareTo(n) >= 0) {
+                return null;
+            }
+            BigInteger x = r.add(BigInteger.valueOf(v / 2).multiply(n));
+            org.bouncycastle.math.ec.ECCurve curve = CURVE_SPEC.getCurve();
+            if (x.compareTo(curve.getField().getCharacteristic()) >= 0) {
+                return null;
+            }
+            byte[] xb = org.bouncycastle.util.BigIntegers.asUnsignedByteArray(32, x);
+            byte[] enc = new byte[33];
+            enc[0] = (byte) (0x02 | (v & 1));
+            System.arraycopy(xb, 0, enc, 1, 32);
+            ECPoint rPoint = curve.decodePoint(enc);
+            BigInteger e = new BigInteger(1, hash);
+            BigInteger rInv = r.modInverse(n);
+            BigInteger u1 = n.subtract(e.mod(n)).multiply(rInv).mod(n);
+            BigInteger u2 = s.multiply(rInv).mod(n);
+            ECPoint q = org.bouncycastle.math.ec.ECAlgorithms
+                    .sumOfTwoMultiplies(CURVE_SPEC.getG(), u1, rPoint, u2).normalize();
+            return q.isInfinity() ? null : q.getEncoded(true);
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    /**
+     * Go's {@code VerifyRSAJWS}: RS256/384/512 (PKCS#1 v1.5) and PS256/384/512 (PSS; the salt length is
+     * detected, as Go's nil options do). Returns normally on success.
+     */
+    public static void verifyRsaJws(String alg, java.security.interfaces.RSAPublicKey pub, byte[] signingInput,
+            byte[] sig) throws Exception {
+        if (pub == null) {
+            throw new Exception("nil RSA public key");
+        }
+        String bits = alg.length() == 5 ? alg.substring(2) : "";
+        String hash = switch (bits) {
+            case "256" -> "SHA-256";
+            case "384" -> "SHA-384";
+            case "512" -> "SHA-512";
+            default -> null;
+        };
+        if (hash == null || !(alg.startsWith("RS") || alg.startsWith("PS"))) {
+            throw new Exception("unsupported JWS alg: " + alg);
+        }
+        byte[] digest = java.security.MessageDigest.getInstance(hash).digest(signingInput);
+        boolean ok;
+        if (alg.startsWith("RS")) {
+            Signature v = Signature.getInstance("SHA" + bits + "withRSA");
+            v.initVerify(pub);
+            v.update(signingInput);
+            ok = v.verify(sig);
+        } else {
+            ok = verifyPssAutoSalt(pub, hash, digest, sig);
+        }
+        if (!ok) {
+            throw new Exception("crypto/rsa: verification error");
+        }
+    }
+
+    /** RFC 8017 9.1.2 EMSA-PSS-VERIFY with MGF1 over the same hash and the salt length read from the encoding. */
+    private static boolean verifyPssAutoSalt(java.security.interfaces.RSAPublicKey pub, String hashName,
+            byte[] mHash, byte[] sig) throws Exception {
+        BigInteger n = pub.getModulus();
+        int k = (n.bitLength() + 7) / 8;
+        if (sig.length != k) {
+            return false;
+        }
+        BigInteger sInt = new BigInteger(1, sig);
+        if (sInt.compareTo(n) >= 0) {
+            return false;
+        }
+        int emBits = n.bitLength() - 1;
+        int emLen = (emBits + 7) / 8;
+        byte[] full = org.bouncycastle.util.BigIntegers.asUnsignedByteArray(k, sInt.modPow(pub.getPublicExponent(), n));
+        byte[] em = extract(full, k - emLen, emLen);
+        int hLen = mHash.length;
+        if (emLen < hLen + 2 || (em[emLen - 1] & 0xff) != 0xbc) {
+            return false;
+        }
+        byte[] maskedDb = extract(em, 0, emLen - hLen - 1);
+        byte[] h = extract(em, emLen - hLen - 1, hLen);
+        int topBits = 8 * emLen - emBits;
+        if (topBits > 0 && (maskedDb[0] & ((0xff << (8 - topBits)) & 0xff)) != 0) {
+            return false;
+        }
+        MessageDigest md = MessageDigest.getInstance(hashName);
+        byte[] db = new byte[maskedDb.length];
+        for (int i = 0, ctr = 0; i < db.length; ctr++) {
+            md.update(h);
+            md.update(new byte[] {(byte) (ctr >>> 24), (byte) (ctr >>> 16), (byte) (ctr >>> 8), (byte) ctr});
+            byte[] block = md.digest();
+            for (int j = 0; j < block.length && i < db.length; j++, i++) {
+                db[i] = (byte) (maskedDb[i] ^ block[j]);
+            }
+        }
+        if (topBits > 0) {
+            db[0] &= (byte) (0xff >>> topBits);
+        }
+        int i = 0;
+        while (i < db.length && db[i] == 0) {
+            i++;
+        }
+        if (i == db.length || db[i] != 0x01) {
+            return false;
+        }
+        byte[] salt = extract(db, i + 1, db.length - i - 1);
+        md.update(new byte[8]);
+        md.update(mHash);
+        md.update(salt);
+        return java.util.Arrays.equals(md.digest(), h);
     }
 
     /**

@@ -16,7 +16,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.PublicKey;
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -109,11 +108,15 @@ public class JWTVerifier {
         PublicKey publicKey = VerificationMethodMaterial.ecPublicKeyFromEntry(vm);
 
         String signingString = parts[0] + "." + parts[1];
-        byte[] signature = Base64.getUrlDecoder().decode(parts[2]);
-        if (signature.length == 65) {
-            signature = Arrays.copyOf(signature, 64);
-        } else if (signature.length != 64) {
-            throw new Exception("invalid signature length: got " + signature.length + ", want 64 or 65");
+        byte[] signature;
+        try {
+            signature = rawUrlDecode(parts[2]);
+        } catch (IllegalArgumentException e) {
+            throw new Exception("invalid signature: " + e.getMessage(), e);
+        }
+        // Exactly r||s (RFC 7518); a recovery byte is a byte nobody signed.
+        if (signature.length != 64) {
+            throw new Exception("invalid signature length");
         }
 
         // alg was matched to the key kind above, so publicKey is on the curve alg
@@ -139,28 +142,17 @@ public class JWTVerifier {
         if (doc == null) {
             throw new Exception("did document is nil");
         }
-        String want = normalizeVmUrl(doc.getId(), kid);
+        if (kid == null || kid.isEmpty()) {
+            throw new Exception("verification method is empty");
+        }
         if (doc.getVerificationMethod() != null) {
             for (VerificationMethodEntry vm : doc.getVerificationMethod()) {
-                if (want.equals(vm.getId())) {
+                if (kid.equals(vm.getId())) {
                     return vm;
                 }
             }
         }
         throw new Exception("verification method '" + kid + "' not found in DID '" + doc.getId() + "' document");
-    }
-
-    private static String normalizeVmUrl(String did, String kid) {
-        if (kid == null || kid.isEmpty()) {
-            return "";
-        }
-        if (kid.startsWith("did:")) {
-            return kid;
-        }
-        if (kid.startsWith("#")) {
-            return did + kid;
-        }
-        return did + "#" + kid;
     }
 
     // --- proof purpose -------------------------------------------------------
@@ -255,7 +247,7 @@ public class JWTVerifier {
         // matches the field case-insensitively would read a value this lookup
         // never sees, letting a signer name the victim under an unchecked key.
         for (String k : doc.keySet()) {
-            if (!k.equals(field) && k.equalsIgnoreCase(field)) {
+            if (!k.equals(field) && equalFold(k, field)) {
                 throw new Exception("JWT carries \"" + k + "\", which differs from " + field + " only by case");
             }
         }
@@ -279,6 +271,33 @@ public class JWTVerifier {
         throw new Exception("JWT names no signer: both iss and " + field + " are absent");
     }
 
+    /**
+     * Go's {@code strings.EqualFold} (simple Unicode folding, so the Kelvin sign folds to k and the long s
+     * to s). Java's {@code equalsIgnoreCase} also folds the dotless i and dotted I to ASCII i, which Go
+     * does not.
+     */
+    static boolean equalFold(String a, String b) {
+        int[] x = a.codePoints().toArray();
+        int[] y = b.codePoints().toArray();
+        if (x.length != y.length) {
+            return false;
+        }
+        for (int i = 0; i < x.length; i++) {
+            if (x[i] != y[i] && (!foldable(x[i]) || !foldable(y[i]) || fold(x[i]) != fold(y[i]))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean foldable(int cp) {
+        return cp != 0x130 && cp != 0x131;
+    }
+
+    private static int fold(int cp) {
+        return Character.toLowerCase(Character.toUpperCase(cp));
+    }
+
     private static String didFromClaim(Object v) {
         if (v instanceof String s) {
             return s;
@@ -291,24 +310,25 @@ public class JWTVerifier {
 
     // --- revocation / purpose check -----------------------------------------
 
-    private static Instant jwtIssuedAt(Map<String, Object> body) {
+    /** Go's {@code jwtutil.NumericClaim("iat")}: absent or null is nil, otherwise a number above zero. */
+    private static Instant jwtIssuedAt(Map<String, Object> body) throws Exception {
         Object iat = body.get("iat");
-        if (iat instanceof Number n) {
-            return Instant.ofEpochSecond(n.longValue());
+        if (iat == null) {
+            return null;
         }
-        if (iat instanceof String s && !s.isBlank()) {
-            try {
-                return Instant.ofEpochSecond(Long.parseLong(s.trim()));
-            } catch (NumberFormatException ignored) {
-                return null;
-            }
+        if (!(iat instanceof Number n)) {
+            throw new Exception("invalid iat type: " + iat.getClass().getSimpleName());
         }
-        return null;
+        long sec = n.longValue();
+        if (sec <= 0) {
+            throw new Exception("invalid iat value: " + iat);
+        }
+        return Instant.ofEpochSecond(sec);
     }
 
     private static void enforceStrictPurpose(DIDDocument doc, VerificationMethodEntry vm, String purpose,
             Instant issuedAt) throws Exception {
-        boolean softRevoked = vm.getRevoked() != null && !vm.getRevoked().isEmpty();
+        boolean softRevoked = vm.getRevoked() != null;
         if (softRevoked && issuedAt == null
                 && !RevocationReasons.isHardRevocationReason(vm.getRevocationReason())) {
             throw new Exception("verification method '" + vm.getId() + "' was revoked at " + vm.getRevoked()
@@ -318,8 +338,21 @@ public class JWTVerifier {
         StrictPurposeCheck.enforce(doc, vm, purpose, issuedAt != null ? issuedAt.toString() : "");
     }
 
+    /** Go's base64.RawURLEncoding: URL alphabet, no padding. */
+    private static byte[] rawUrlDecode(String b64) {
+        if (b64.indexOf('=') >= 0) {
+            throw new IllegalArgumentException("illegal base64 data: padding is not allowed");
+        }
+        return Base64.getUrlDecoder().decode(b64);
+    }
+
     private static Map<String, Object> decode(String b64) throws Exception {
-        byte[] bytes = Base64.getUrlDecoder().decode(b64);
+        byte[] bytes;
+        try {
+            bytes = rawUrlDecode(b64);
+        } catch (IllegalArgumentException e) {
+            throw new Exception("invalid JWT segment: " + e.getMessage(), e);
+        }
         return MAPPER.readValue(bytes, new TypeReference<Map<String, Object>>() {
         });
     }

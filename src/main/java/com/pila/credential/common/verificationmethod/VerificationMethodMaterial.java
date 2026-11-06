@@ -40,28 +40,162 @@ public final class VerificationMethodMaterial {
         throw new Exception("verification method '" + verificationMethodURL + "' not found in DID document");
     }
 
+    /**
+     * Go ECPubFromVM: publicKeyHex (read as secp256k1, whatever the VM type), then publicKeyJwk (secp256k1, P-256
+     * or P-384), then publicKeyMultibase (P-256 or P-384, curve from the multicodec prefix).
+     */
     public static PublicKey ecPublicKeyFromEntry(VerificationMethodEntry vm) throws Exception {
-        if (vm.getPublicKeyJwk() != null) {
-            return jwkToPublicKey(vm.getPublicKeyJwk());
-        }
-        if (vm.getPublicKeyMultibase() != null && !vm.getPublicKeyMultibase().isEmpty()) {
-            return Multikey.publicKeyFromMultibase(vm.getPublicKeyMultibase());
+        if (vm == null) {
+            throw new Exception("verification method is nil");
         }
         if (vm.getPublicKeyHex() != null && !vm.getPublicKeyHex().isEmpty()) {
-            if (VerificationMethodKeyKind.fromEntry(vm) != VerificationMethodKeyKind.SECP256K1) {
-                throw new Exception("publicKeyHex is only valid for secp256k1 verification methods, got type "
-                        + vm.getType());
-            }
-            String hex = vm.getPublicKeyHex().startsWith("0x") ? vm.getPublicKeyHex().substring(2)
-                    : vm.getPublicKeyHex();
-            byte[] pubBytes = hexStringToBytes(hex);
-            X9ECParameters ecParams = CustomNamedCurves.getByName("secp256k1");
-            ECPoint point = ecParams.getCurve().decodePoint(pubBytes);
-            KeyFactory kf = KeyFactory.getInstance("EC", "BC");
-            return kf.generatePublic(new org.bouncycastle.jce.spec.ECPublicKeySpec(point,
-                    ECNamedCurveTable.getParameterSpec("secp256k1")));
+            return secp256k1PubFromHex(vm.getPublicKeyHex());
         }
-        throw new Exception("no public key in verification method " + vm.getId());
+        if (vm.getPublicKeyJwk() != null) {
+            return ecPubFromJwk(vm.getPublicKeyJwk());
+        }
+        if (vm.getPublicKeyMultibase() != null && !vm.getPublicKeyMultibase().isEmpty()) {
+            return Multikey.decodeEc(vm.getPublicKeyMultibase()).toPublicKey();
+        }
+        throw new Exception("verification method '" + vm.getId() + "' has no public key material");
+    }
+
+    /** Go stripHexPrefix: a leading "0x" or "0X"; the rest must be ASCII hex. */
+    static byte[] strictHex(String s, String what) throws Exception {
+        String h = s.length() >= 2 && s.charAt(0) == '0' && (s.charAt(1) == 'x' || s.charAt(1) == 'X')
+                ? s.substring(2)
+                : s;
+        if (h.length() % 2 != 0) {
+            throw new Exception(what + ": odd length hex string");
+        }
+        byte[] out = new byte[h.length() / 2];
+        for (int i = 0; i < out.length; i++) {
+            int hi = asciiHexDigit(h.charAt(i * 2));
+            int lo = asciiHexDigit(h.charAt(i * 2 + 1));
+            if (hi < 0 || lo < 0) {
+                throw new Exception(what + ": invalid byte in hex string");
+            }
+            out[i] = (byte) ((hi << 4) | lo);
+        }
+        return out;
+    }
+
+    private static int asciiHexDigit(char c) {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        return -1;
+    }
+
+    /** Go Secp256k1PubFromHex: 33-byte compressed (02/03) or 65-byte uncompressed (04), on the curve. */
+    public static PublicKey secp256k1PubFromHex(String h) throws Exception {
+        byte[] b = strictHex(h, "decode secp256k1 public key hex");
+        if (!((b.length == 33 && (b[0] == 0x02 || b[0] == 0x03)) || (b.length == 65 && b[0] == 0x04))) {
+            throw new Exception("secp256k1 public key: want 33 compressed or 65 uncompressed bytes, got " + b.length);
+        }
+        X9ECParameters ecParams = CustomNamedCurves.getByName("secp256k1");
+        ECPoint point;
+        try {
+            point = ecParams.getCurve().decodePoint(b);
+        } catch (Exception e) {
+            throw new Exception("invalid secp256k1 public key: " + e.getMessage(), e);
+        }
+        if (point.isInfinity() || !point.isValid()) {
+            throw new Exception("invalid secp256k1 public key");
+        }
+        KeyFactory kf = KeyFactory.getInstance("EC", "BC");
+        return kf.generatePublic(new org.bouncycastle.jce.spec.ECPublicKeySpec(point,
+                ECNamedCurveTable.getParameterSpec("secp256k1")));
+    }
+
+    private static byte[] rawUrlDecode(String s, String what) throws Exception {
+        if (s == null || s.indexOf('=') >= 0) {
+            throw new Exception("failed to decode " + what + ": illegal base64url data");
+        }
+        try {
+            return Base64.getUrlDecoder().decode(s.replace("\r", "").replace("\n", ""));
+        } catch (IllegalArgumentException e) {
+            throw new Exception("failed to decode " + what + ": " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Go ECPubFromJWK: an EC JWK on secp256k1, P-256 or P-384, RawURL coordinates (a short one is left-padded, a
+     * longer one refused), off-curve points rejected.
+     */
+    public static PublicKey ecPubFromJwk(JWK jwk) throws Exception {
+        if (jwk == null) {
+            throw new Exception("jwk is nil");
+        }
+        if (!"EC".equals(jwk.getKty())) {
+            throw new Exception("unsupported key type: " + jwk.getKty());
+        }
+        String crv = jwk.getCrv();
+        String custom;
+        String named;
+        int size;
+        if ("secp256k1".equals(crv)) {
+            custom = "secp256k1";
+            named = "secp256k1";
+            size = 32;
+        } else if ("P-256".equals(crv)) {
+            custom = "P-256";
+            named = "prime256v1";
+            size = 32;
+        } else if ("P-384".equals(crv)) {
+            custom = "P-384";
+            named = "secp384r1";
+            size = 48;
+        } else {
+            throw new Exception("unsupported curve: " + crv + " (want secp256k1, P-256 or P-384)");
+        }
+        byte[] xBytes = rawUrlDecode(jwk.getX(), "X coordinate");
+        byte[] yBytes = rawUrlDecode(jwk.getY(), "Y coordinate");
+        if (xBytes.length > size || yBytes.length > size) {
+            throw new Exception("jwk " + crv + ": coordinates must be at most " + size + " bytes, got x="
+                    + xBytes.length + " y=" + yBytes.length);
+        }
+        X9ECParameters ecParams = CustomNamedCurves.getByName(custom);
+        ECPoint point;
+        try {
+            point = ecParams.getCurve().validatePoint(new BigInteger(1, xBytes), new BigInteger(1, yBytes));
+        } catch (Exception e) {
+            throw new Exception("jwk " + crv + ": invalid public key point: " + e.getMessage(), e);
+        }
+        if (point.isInfinity()) {
+            throw new Exception("jwk " + crv + ": invalid public key point");
+        }
+        KeyFactory kf = KeyFactory.getInstance("EC", "BC");
+        return kf.generatePublic(new org.bouncycastle.jce.spec.ECPublicKeySpec(point,
+                ECNamedCurveTable.getParameterSpec(named)));
+    }
+
+    /** Go P256PubKeyFromJWK: crv=P-256 only. */
+    public static PublicKey p256PubKeyFromJwk(JWK jwk) throws Exception {
+        if (jwk == null) {
+            throw new Exception("jwk is nil");
+        }
+        if (!"P-256".equals(jwk.getCrv())) {
+            throw new Exception("unsupported curve: " + jwk.getCrv() + " (want P-256)");
+        }
+        return ecPubFromJwk(jwk);
+    }
+
+    /** Go RSAPubKeyFromJWK. */
+    public static java.security.interfaces.RSAPublicKey rsaPubKeyFromJwk(JWK jwk) throws Exception {
+        if (jwk == null) {
+            throw new Exception("jwk is nil");
+        }
+        if (!"RSA".equals(jwk.getKty())) {
+            throw new Exception("unsupported key type: " + jwk.getKty());
+        }
+        if (jwk.getN() == null || jwk.getN().isEmpty() || jwk.getE() == null || jwk.getE().isEmpty()) {
+            throw new Exception("RSA jwk missing n or e");
+        }
+        BigInteger n = new BigInteger(1, rawUrlDecode(jwk.getN(), "n"));
+        BigInteger e = new BigInteger(1, rawUrlDecode(jwk.getE(), "e"));
+        return (java.security.interfaces.RSAPublicKey) java.security.KeyFactory.getInstance("RSA")
+                .generatePublic(new java.security.spec.RSAPublicKeySpec(n, e));
     }
 
     public static String getDefaultPublicKeyHex(CredentialResolver resolver, String issuer) throws Exception {
@@ -112,43 +246,27 @@ public final class VerificationMethodMaterial {
         throw new Exception("no public key in verification method '" + vm.getId() + "'");
     }
 
-    static String didFromVerificationMethodURL(String verificationMethodURL) throws Exception {
+    /**
+     * Go DIDFromVerificationMethodURL: the DID before the first '#'; the URL must carry a '#' and start with
+     * "did:".
+     */
+    public static String didFromVerificationMethodURL(String verificationMethodURL) throws Exception {
+        if (verificationMethodURL == null || verificationMethodURL.isEmpty()) {
+            throw new Exception("verification method is empty");
+        }
         int hashIndex = verificationMethodURL.indexOf('#');
         if (hashIndex <= 0) {
-            throw new Exception("invalid verification method URL: " + verificationMethodURL);
+            throw new Exception("invalid verification method URL, could not extract DID: " + verificationMethodURL);
         }
-        return verificationMethodURL.substring(0, hashIndex);
+        String didPart = verificationMethodURL.substring(0, hashIndex);
+        if (!didPart.startsWith("did:")) {
+            throw new Exception("extracted DID '" + didPart + "' is invalid, must start with 'did:'");
+        }
+        return didPart;
     }
 
     private static PublicKey jwkToPublicKey(JWK jwk) throws Exception {
-        if (!"EC".equals(jwk.getKty())) {
-            throw new Exception("unsupported key type: " + jwk.getKty());
-        }
-        byte[] xBytes = Base64.getUrlDecoder().decode(jwk.getX());
-        byte[] yBytes = Base64.getUrlDecoder().decode(jwk.getY());
-        BigInteger x = new BigInteger(1, xBytes);
-        BigInteger y = new BigInteger(1, yBytes);
-
-        String curveName;
-        if ("secp256k1".equals(jwk.getCrv())) {
-            curveName = "secp256k1";
-        } else if ("P-256".equals(jwk.getCrv())) {
-            curveName = "prime256v1";
-        } else {
-            throw new Exception("unsupported curve: " + jwk.getCrv());
-        }
-
-        X9ECParameters ecParams = CustomNamedCurves.getByName(curveName);
-        if (ecParams == null && "P-256".equals(jwk.getCrv())) {
-            ecParams = CustomNamedCurves.getByName("P-256");
-        }
-        if (ecParams == null) {
-            throw new Exception("curve not found: " + jwk.getCrv());
-        }
-        ECPoint point = ecParams.getCurve().createPoint(x, y);
-        KeyFactory kf = KeyFactory.getInstance("EC", "BC");
-        return kf.generatePublic(new org.bouncycastle.jce.spec.ECPublicKeySpec(point,
-                ECNamedCurveTable.getParameterSpec(curveName)));
+        return ecPubFromJwk(jwk);
     }
 
     private static String jwkSecp256k1ToHex(JWK jwk) throws Exception {
@@ -162,15 +280,5 @@ public final class VerificationMethodMaterial {
             hex.append(String.format("%02x", b));
         }
         return hex.toString();
-    }
-
-    private static byte[] hexStringToBytes(String hex) {
-        int len = hex.length();
-        byte[] data = new byte[len / 2];
-        for (int i = 0; i < len; i += 2) {
-            data[i / 2] = (byte) ((Character.digit(hex.charAt(i), 16) << 4)
-                    + Character.digit(hex.charAt(i + 1), 16));
-        }
-        return data;
     }
 }

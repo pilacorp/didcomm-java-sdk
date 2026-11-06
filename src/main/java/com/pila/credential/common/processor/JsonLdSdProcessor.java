@@ -164,6 +164,15 @@ public final class JsonLdSdProcessor {
             }
             return out;
         }
+        if (value instanceof Number n) {
+            // Go decodes every JSON number into float64 (so 2^53+1 loses its low bit) and json-gold
+            // then types an integral value below 1e21 as xsd:integer and the rest as xsd:double.
+            double d = n.doubleValue();
+            if (d == Math.rint(d) && Math.abs(d) < 1e21) {
+                return new java.math.BigDecimal(d).toBigInteger();
+            }
+            return d;
+        }
         return value;
     }
 
@@ -238,15 +247,54 @@ public final class JsonLdSdProcessor {
         return single;
     }
 
+    private static final java.util.Set<String> KEYWORDS = java.util.Set.of("@base", "@container", "@context",
+            "@default", "@direction", "@embed", "@explicit", "@json", "@id", "@included", "@index", "@first",
+            "@graph", "@import", "@language", "@list", "@nest", "@none", "@omitDefault", "@prefix", "@preserve",
+            "@propagate", "@protected", "@requireAll", "@reverse", "@set", "@type", "@value", "@version", "@vocab");
+    private static final java.util.regex.Pattern SCHEME = java.util.regex.Pattern.compile("^[A-Za-z][A-Za-z0-9+.\\-]*:");
+
+    /**
+     * json-gold's {@code IsRelativeIri}: neither a keyword nor absolute, where absolute means a blank
+     * node label or something Go's {@code url.Parse} accepts with a scheme (so {@code ""} is relative
+     * and a colon alone does not make an IRI absolute).
+     */
     static boolean isRelativeIri(String s) {
-        if (s == null || s.isEmpty() || s.startsWith("_:")) {
+        if (s == null || KEYWORDS.contains(s)) {
             return false;
         }
-        if (s.startsWith("urn:") || s.contains("://")) {
+        if (s.startsWith("_:")) {
             return false;
         }
-        if (s.contains(":")) {
-            return false;
+        return !(SCHEME.matcher(s).find() && parsesAsUrl(s));
+    }
+
+    /** The cases where url.Parse errors: control characters, malformed percent escapes, bad host characters. */
+    private static boolean parsesAsUrl(String s) {
+        int slashes = s.indexOf("//");
+        if (slashes >= 0 && SCHEME.matcher(s.substring(0, slashes)).matches()) {
+            int end = s.length();
+            for (int k = slashes + 2; k < s.length(); k++) {
+                if ("/?#".indexOf(s.charAt(k)) >= 0) {
+                    end = k;
+                    break;
+                }
+            }
+            String authority = s.substring(slashes + 2, end);
+            for (int k = 0; k < authority.length(); k++) {
+                if (" <>\"\\^`{|}".indexOf(authority.charAt(k)) >= 0) {
+                    return false;
+                }
+            }
+        }
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c < 0x20 || c == 0x7f) {
+                return false;
+            }
+            if (c == '%' && (i + 2 >= s.length() || Character.digit(s.charAt(i + 1), 16) < 0
+                    || Character.digit(s.charAt(i + 2), 16) < 0)) {
+                return false;
+            }
         }
         return true;
     }

@@ -5,9 +5,13 @@ public final class DefaultProvider implements Signer {
     private final String address;
 
     public DefaultProvider(String privateKeyHex) {
-        this.priv32 = Hex.decode(privateKeyHex);
+        this.priv32 = Hex.decodeGo(privateKeyHex);
         if (priv32.length != 32) {
             throw new IllegalArgumentException("private key must be 32 bytes");
+        }
+        java.math.BigInteger d = new java.math.BigInteger(1, priv32);
+        if (d.signum() == 0 || d.compareTo(Secp256k1.N) >= 0) {
+            throw new IllegalArgumentException("invalid private key: scalar must be in [1, n-1]");
         }
         this.address = Secp256k1.addressFromPrivate(priv32);
     }

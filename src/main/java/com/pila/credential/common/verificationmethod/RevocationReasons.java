@@ -5,6 +5,8 @@ package com.pila.credential.common.verificationmethod;
  */
 public final class RevocationReasons {
     public static final String KEY_COMPROMISE = "keyCompromise";
+    /** RotateVerificationMethod's default reason (Go ReasonSuperseded). */
+    public static final String SUPERSEDED = "superseded";
 
     private RevocationReasons() {
     }

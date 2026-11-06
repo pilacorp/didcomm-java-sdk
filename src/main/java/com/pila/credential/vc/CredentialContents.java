@@ -22,4 +22,5 @@ public class CredentialContents {
     private List<Status> credentialStatus = new ArrayList<>();
     private List<Subject> subject = new ArrayList<>();
     private List<Schema> schemas = new ArrayList<>();
+    private List<TermsOfUse> termsOfUse = new ArrayList<>();
 }

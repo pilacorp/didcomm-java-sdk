@@ -63,13 +63,19 @@ public final class Abi {
 
     public static List<WriterAnchor> decodeWriterLog(String writerTopic, byte[] data) {
         String writer = "0x" + writerTopic.substring(writerTopic.length() - 40).toLowerCase();
-        BigInteger[] offsets = new BigInteger[3];
-        for (int i = 0; i < 3; i++) {
-            offsets[i] = new BigInteger(1, Arrays.copyOfRange(data, i * 32, (i + 1) * 32));
+        // go-ethereum Unpack: the head is three offsets, each array a length word then its elements
+        if (data.length < 96) {
+            throw new IllegalArgumentException("abi: cannot marshal in to go type: length insufficient "
+                    + data.length + " require 96");
         }
-        List<String> dids = decodeAddressArray(data, offsets[0].intValue());
-        List<BigInteger> indexes = decodeUintArray(data, offsets[1].intValue());
-        List<String> roots = decodeBytes32Array(data, offsets[2].intValue());
+        int[] offsets = new int[3];
+        for (int i = 0; i < 3; i++) {
+            offsets[i] = boundedInt(new BigInteger(1, Arrays.copyOfRange(data, i * 32, (i + 1) * 32)), data.length,
+                    "offset");
+        }
+        List<String> dids = decodeAddressArray(data, offsets[0]);
+        List<BigInteger> indexes = decodeUintArray(data, offsets[1]);
+        List<String> roots = decodeBytes32Array(data, offsets[2]);
         if (dids.size() != indexes.size() || dids.size() != roots.size()) {
             throw new IllegalArgumentException("BatchSubtreesAnchoredByWriter arrays have lengths "
                     + dids.size() + ", " + indexes.size() + " and " + roots.size());
@@ -84,6 +90,29 @@ public final class Abi {
             out.add(a);
         }
         return out;
+    }
+
+    /** A word used as an offset or a length must fit the data it points into. */
+    private static int boundedInt(BigInteger v, int limit, String what) {
+        if (v.bitLength() > 31 || v.intValue() > limit) {
+            throw new IllegalArgumentException("abi: improperly formatted output: " + what + " " + v
+                    + " is out of bounds (data is " + limit + " bytes)");
+        }
+        return v.intValue();
+    }
+
+    /** The element count of the array at {@code offset}, checked against the remaining data. */
+    private static int arrayLength(byte[] data, int offset) {
+        if (offset + 32 > data.length) {
+            throw new IllegalArgumentException("abi: cannot marshal in to go type: length insufficient "
+                    + data.length + " require " + (offset + 32));
+        }
+        int n = boundedInt(new BigInteger(1, Arrays.copyOfRange(data, offset, offset + 32)), data.length, "array length");
+        if ((long) offset + 32 + (long) n * 32 > data.length) {
+            throw new IllegalArgumentException("abi: cannot marshal in to go type: length insufficient "
+                    + data.length + " require " + ((long) offset + 32 + (long) n * 32));
+        }
+        return n;
     }
 
     public static byte[] encodeWriterLogData(List<String> dids, List<BigInteger> treeIndexes, List<String> roots) {
@@ -133,7 +162,7 @@ public final class Abi {
     }
 
     private static List<String> decodeAddressArray(byte[] data, int offset) {
-        int n = new BigInteger(1, Arrays.copyOfRange(data, offset, offset + 32)).intValue();
+        int n = arrayLength(data, offset);
         List<String> out = new ArrayList<>();
         for (int i = 0; i < n; i++) {
             byte[] w = Arrays.copyOfRange(data, offset + 32 + i * 32, offset + 64 + i * 32);
@@ -143,7 +172,7 @@ public final class Abi {
     }
 
     private static List<BigInteger> decodeUintArray(byte[] data, int offset) {
-        int n = new BigInteger(1, Arrays.copyOfRange(data, offset, offset + 32)).intValue();
+        int n = arrayLength(data, offset);
         List<BigInteger> out = new ArrayList<>();
         for (int i = 0; i < n; i++) {
             out.add(new BigInteger(1, Arrays.copyOfRange(data, offset + 32 + i * 32, offset + 64 + i * 32)));
@@ -152,7 +181,7 @@ public final class Abi {
     }
 
     private static List<String> decodeBytes32Array(byte[] data, int offset) {
-        int n = new BigInteger(1, Arrays.copyOfRange(data, offset, offset + 32)).intValue();
+        int n = arrayLength(data, offset);
         List<String> out = new ArrayList<>();
         for (int i = 0; i < n; i++) {
             out.add(Hex.encode0x(Arrays.copyOfRange(data, offset + 32 + i * 32, offset + 64 + i * 32)).toLowerCase());

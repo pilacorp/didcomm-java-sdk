@@ -38,21 +38,34 @@ public final class Issuer {
         if (!isAddress(p.didAddress)) {
             throw new Exception("invalid did address: " + p.didAddress);
         }
-        String cap = Hex.normalize(p.capId);
-        if (cap.length() != CAP_ID_LENGTH * 2) {
-            throw new Exception("invalid cap id length: expected " + CAP_ID_LENGTH + ", got " + (p.capId == null ? 0 : p.capId.length()));
+        // +2 for the "0x" prefix: exactly 66 characters, like Go
+        if (p.capId == null || p.capId.length() != CAP_ID_LENGTH * 2 + 2) {
+            throw new Exception("invalid cap id length: expected " + CAP_ID_LENGTH + ", got "
+                    + (p.capId == null ? 0 : p.capId.length()));
         }
     }
 
     public static byte[] buildIssueDIDPayload(IssueDIDPayload input) throws Exception {
         validateIssueDIDPayload(input);
+        if (input.didType < 0 || input.didType > 0xff) {
+            throw new Exception("value " + input.didType + " exceeds uint8 max value");
+        }
+        byte[] capId;
+        try {
+            capId = Hex.decodeGo(input.capId);
+        } catch (IllegalArgumentException e) {
+            throw new Exception("invalid bytes32 " + input.capId + ": " + e.getMessage(), e);
+        }
+        if (capId.length != CAP_ID_LENGTH) {
+            throw new Exception("bytes32 must be 32 bytes, got " + capId.length);
+        }
         byte[] packed = abiEncodePacked(
                 CAP_CREATE_ACTION.getBytes(StandardCharsets.UTF_8),
                 addressBytes(input.issuerAddress),
                 addressBytes(input.didAddress),
                 new byte[] { (byte) input.didType },
                 uint64(input.epoch),
-                Hex.decode(input.capId));
+                capId);
         byte[] prefix = new byte[] { 0x19, 0x00 };
         byte[] addr = addressBytes(input.contractAddress);
         byte[] out = new byte[prefix.length + addr.length + packed.length];
@@ -96,18 +109,37 @@ public final class Issuer {
     }
 
     public static boolean isAddress(String s) {
+        // Go common.IsHexAddress: an optional 0x/0X prefix, then exactly 40 ASCII hex digits
         if (s == null) {
             return false;
         }
-        String n = Hex.normalize(s);
-        return n.length() == 40;
+        String n = s.length() >= 2 && s.charAt(0) == '0' && (s.charAt(1) == 'x' || s.charAt(1) == 'X')
+                ? s.substring(2)
+                : s;
+        if (n.length() != 40) {
+            return false;
+        }
+        for (int i = 0; i < n.length(); i++) {
+            if (Hex.digit(n.charAt(i)) < 0) {
+                return false;
+            }
+        }
+        return true;
     }
 
     static byte[] addressBytes(String s) {
         return Hex.decode(s);
     }
 
+    /**
+     * Go encodes the epoch through {@code strconv.Itoa(int(Epoch))} and {@code big.Int.Bytes()}, which is the
+     * magnitude of the signed 64-bit value: a uint64 epoch of 2^63 or more is written as its two's-complement
+     * magnitude, not as the unsigned value.
+     */
     private static byte[] uint64(long v) {
+        if (v < 0) {
+            v = -v;
+        }
         byte[] out = new byte[8];
         for (int i = 7; i >= 0; i--) {
             out[i] = (byte) (v & 0xff);

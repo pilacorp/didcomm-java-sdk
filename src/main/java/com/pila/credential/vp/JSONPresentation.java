@@ -3,29 +3,30 @@ package com.pila.credential.vp;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pila.credential.common.dto.Proof;
+import com.pila.credential.common.error.AudienceUnboundException;
+import com.pila.credential.common.error.CredentialException;
 import com.pila.credential.common.signer.DefaultSignerProvider;
+import com.pila.credential.common.signer.P256SignerProvider;
 import com.pila.credential.common.signer.SignerProvider;
+import com.pila.credential.common.util.Vcdm;
 import com.pila.credential.common.verificationmethod.CredentialResolver;
+import com.pila.credential.common.verificationmethod.ResolveVmUrl;
 import com.pila.credential.common.verificationmethod.VerificationMethodEntry;
 import com.pila.credential.common.verificationmethod.VerificationMethodKeyKind;
-import com.pila.credential.vc.CredentialConfig;
 
-import java.nio.charset.StandardCharsets;
 import java.security.PublicKey;
 import java.util.Map;
 
 /**
- * JSON-LD verifiable presentation with embedded Data Integrity or secp256k1 proof.
+ * JSON-LD verifiable presentation with embedded Data Integrity or secp256k1 proof. Proofs are appended to the
+ * proof set, never replaced.
  */
-public class JSONPresentation {
-    private static final String DEFAULT_VERIFICATION_METHOD_KEY = "key-1";
+public class JSONPresentation implements Presentation {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private PresentationData presentationData;
-    private String verificationMethodKey;
 
     private JSONPresentation() {
-        this.verificationMethodKey = DEFAULT_VERIFICATION_METHOD_KEY;
     }
 
     public static JSONPresentation create(PresentationContents vpc) throws Exception {
@@ -33,14 +34,19 @@ public class JSONPresentation {
     }
 
     public static JSONPresentation create(PresentationContents vpc, PresentationOptions opts) throws Exception {
-        PresentationData m = PresentationHelper.serializePresentationContents(vpc);
         JSONPresentation pres = new JSONPresentation();
-        pres.presentationData = m;
-        if (opts != null && opts.getVerificationMethodKey() != null) {
-            pres.verificationMethodKey = opts.getVerificationMethodKey();
-        }
-        pres.executeOptions(opts);
+        pres.presentationData = PresentationHelper.serializePresentationContents(vpc);
+        pres.executeOptions(PresentationOptions.orEmpty(opts));
         return pres;
+    }
+
+    public static JSONPresentation newJSONPresentation(PresentationContents vpc, PresentationOptions opts)
+            throws Exception {
+        return create(vpc, opts);
+    }
+
+    public static JSONPresentation parseJSONPresentation(byte[] rawJSON, PresentationOptions opts) throws Exception {
+        return parse(rawJSON, opts);
     }
 
     public static JSONPresentation parse(byte[] rawJSON) throws Exception {
@@ -51,22 +57,33 @@ public class JSONPresentation {
         if (rawJSON == null || rawJSON.length == 0) {
             throw new Exception("JSON string is empty");
         }
-        Map<String, Object> map = MAPPER.readValue(rawJSON, new TypeReference<Map<String, Object>>() {
-        });
+        Map<String, Object> map;
+        try {
+            map = MAPPER.readValue(rawJSON, new TypeReference<Map<String, Object>>() {
+            });
+        } catch (Exception e) {
+            throw new Exception("invalid JSON format", e);
+        }
         if (map == null) {
             throw new Exception("invalid JSON format");
         }
         JSONPresentation pres = new JSONPresentation();
         pres.presentationData = new PresentationData(map);
-        pres.executeOptions(opts);
+        pres.executeOptions(PresentationOptions.orEmpty(opts));
         return pres;
     }
 
+    /** Signs with a raw P-256 private key (hex scalar), like Go {@code AddProof}. Prefer a provider. */
     public void addProof(String privKeyHex) throws Exception {
-        addProofByProvider(new DefaultSignerProvider(privKeyHex));
+        addProof(privKeyHex, null);
     }
 
     public void addProof(String privKeyHex, PresentationOptions opts) throws Exception {
+        addProofByProvider(new P256SignerProvider(privKeyHex), opts);
+    }
+
+    /** Signs with a raw secp256k1 private key (hex); the VM must hold a secp256k1 key. */
+    public void addProofSecp256k1(String privKeyHex, PresentationOptions opts) throws Exception {
         addProofByProvider(new DefaultSignerProvider(privKeyHex), opts);
     }
 
@@ -74,78 +91,86 @@ public class JSONPresentation {
         addProofByProvider(signerProvider, null);
     }
 
+    /**
+     * Signs bound to the holder VM {@code withVerificationMethodKey} pins (default: latest active authentication
+     * VM). {@code withChallenge} / {@code withDomain} go on the proof. Proofs are appended;
+     * {@code withReplaceProof} is refused.
+     */
     public void addProofByProvider(SignerProvider signerProvider, PresentationOptions opts) throws Exception {
         if (signerProvider == null) {
             throw new IllegalArgumentException("signer provider cannot be null");
         }
-        executeOptions(opts);
-        Object holderObj = presentationData.get("holder");
-        if (!(holderObj instanceof String holder) || holder.isEmpty()) {
+        PresentationOptions o = PresentationOptions.orEmpty(opts);
+        refuseReplaceOnJSONLD(o);
+        executeOptions(o.forSigning());
+
+        String holder = Vcdm.didFromField(presentationData.get("holder"));
+        if (holder == null) {
             throw new Exception("holder is missing or invalid");
         }
-        PresentationOptions options = opts != null ? opts : new PresentationOptions();
-        String vmKey = verificationMethodKey;
-        if (options.getVerificationMethodKey() != null && !options.getVerificationMethodKey().isEmpty()) {
-            vmKey = options.getVerificationMethodKey();
-        }
-        CredentialResolver resolver = options.getResolver() != null
-                ? options.getResolver()
-                : CredentialConfig.getDocumentResolver();
-        var signing = com.pila.credential.common.verificationmethod.ResolveVmUrl.resolveSigningVM(
-                holder, "authentication", vmKey, resolver);
+        CredentialResolver resolver = o.effectiveResolver();
+        var signing = ResolveVmUrl.resolveSigningVM(holder, "authentication", o.getVerificationMethodKey(), resolver);
         VerificationMethodEntry vm = signing.vm();
         String vmURL = signing.url();
         VerificationMethodKeyKind kind = VerificationMethodKeyKind.fromEntry(vm);
-        PublicKey vmPub = resolver.ecPublicKeyFromEntry(vm);
-        String didBaseURL = CredentialConfig.getBaseURL();
-
-        if (presentationData.get("proof") != null && !options.isReplaceProof()) {
-            throw new Exception("presentation already has a proof; pass WithReplaceProof to replace it");
-        }
-        if (kind == VerificationMethodKeyKind.SECP256K1) {
-            presentationData.addEcdsaSecp256k1ProofByProvider(
-                    signerProvider, vmURL, "authentication", didBaseURL, vmPub,
-                    options.getChallenge(), options.getDomain());
-        } else if (kind == VerificationMethodKeyKind.P256) {
-            presentationData.addECDSAProofByProvider(
-                    signerProvider,
-                    vmURL,
-                    "authentication",
-                    didBaseURL,
-                    vmPub,
-                    options.getChallenge(),
-                    options.getDomain());
-        } else {
+        if (kind != VerificationMethodKeyKind.SECP256K1 && kind != VerificationMethodKeyKind.P256) {
             throw new Exception("verification method " + vmURL + " has an unrecognized key type");
         }
+        PublicKey vmPub = resolver.ecPublicKeyFromEntry(vm);
+
+        if (kind == VerificationMethodKeyKind.SECP256K1) {
+            presentationData.addEcdsaSecp256k1ProofByProvider(signerProvider, vmURL, "authentication", null, vmPub,
+                    o.getChallenge(), o.getDomain());
+        } else {
+            presentationData.addECDSAProofByProvider(signerProvider, vmURL, "authentication", null, vmPub,
+                    o.getChallenge(), o.getDomain());
+        }
     }
 
+    /** SHA-256 of the canonicalized document body (library canonicalizer); feed it to {@link #createProofSigning}. */
     public byte[] getSigningInput() throws Exception {
-        return presentationData.canonicalize();
+        return presentationData.getDocumentDigest();
     }
 
+    /** The 32-byte digest an external signer signs: SHA-256 of the hashData built from docHash and the proof. */
+    public byte[] createProofSigning(byte[] docHash, Proof proof) throws Exception {
+        return presentationData.createProofSigning(docHash, proof);
+    }
+
+    public void addCustomProof(Proof proof) throws Exception {
+        addCustomProof(proof, null);
+    }
+
+    /**
+     * Attaches a proof signed outside the SDK. challenge, domain and the VM key are part of the proof and cannot
+     * be set here. With {@code withVerifyProof} only the incoming proof is checked (ecdsa-rdfc-2019 only).
+     */
     public void addCustomProof(Proof proof, PresentationOptions opts) throws Exception {
         if (proof == null) {
             throw new IllegalArgumentException("proof cannot be null");
         }
-        PresentationOptions merged = opts != null ? opts : new PresentationOptions();
-        if (!merged.isVerifyProof() && presentationData.get("proof") != null) {
-            merged.setVerifyProof(true);
+        PresentationOptions o = PresentationOptions.orEmpty(opts);
+        refuseReplaceOnJSONLD(o);
+        if (nonEmpty(o.getChallenge()) || nonEmpty(o.getDomain()) || nonEmpty(o.getVerificationMethodKey())) {
+            throw new Exception("withChallenge / withDomain / withVerificationMethodKey cannot be applied by "
+                    + "addCustomProof: set proof.challenge, proof.domain and proof.verificationMethod on the proof "
+                    + "you sign");
         }
-        executeOptions(merged);
+        if (o.isVerifyProof()) {
+            presentationData.verifyDetachedProof(o.effectiveResolver(), proof);
+        }
+        executeOptions(o.forSigning());
         presentationData.addCustomProof(proof);
     }
 
-    public void verify() throws Exception {
-        verify(null);
-    }
-
+    @Override
     public void verify(PresentationOptions opts) throws Exception {
-        PresentationOptions merged = opts != null ? opts : new PresentationOptions();
-        merged.setVerifyProof(true);
-        executeOptions(merged);
+        PresentationOptions o = PresentationOptions.orEmpty(opts).copy();
+        o.setVerifyProof(true);
+        executeOptions(o);
     }
 
+    @Override
     public Map<String, Object> serialize() throws Exception {
         if (presentationData.get("proof") == null) {
             throw new Exception("presentation must have proof before serialization");
@@ -153,89 +178,93 @@ public class JSONPresentation {
         return presentationData.toMap();
     }
 
+    @Override
     public byte[] getContents() throws Exception {
         return presentationData.toJSON();
+    }
+
+    @Override
+    public String getType() {
+        return "JSON";
+    }
+
+    @Override
+    public Object extractField(String path) {
+        return Vcdm.extractField(presentationData, path);
     }
 
     public PresentationData getPresentationData() {
         return presentationData;
     }
 
-    public void setVerificationMethodKey(String verificationMethodKey) {
-        if (verificationMethodKey != null && !verificationMethodKey.isEmpty()) {
-            this.verificationMethodKey = verificationMethodKey;
+    private void executeOptions(PresentationOptions o) throws Exception {
+        if (o.isValidateVC()) {
+            PresentationHelper.verifyEmbeddedCredentials(presentationData, o);
         }
-    }
-
-    public void executeOptions(PresentationOptions opts) throws Exception {
-        if (opts == null) {
-            return;
-        }
-        if (opts.isValidateVC()) {
-            PresentationHelper.verifyEmbeddedCredentials(presentationData);
-        }
-        if (opts.isVerifyProof()) {
-            CredentialResolver resolver = opts.getResolver() != null
-                    ? opts.getResolver()
-                    : (opts.getDidBaseURL() != null && !opts.getDidBaseURL().isEmpty()
-                            ? CredentialConfig.resolverFor(opts.getDidBaseURL())
-                            : CredentialConfig.getDocumentResolver());
-            boolean ok = presentationData.verifyProof(resolver, opts.getProofVerificationMethod());
-            if (!ok) {
-                throw new Exception("invalid proof");
+        if (o.isCheckExpiration()) {
+            try {
+                PresentationHelper.checkExpiration(presentationData, o.getClockSkewLeewayMs());
+            } catch (CredentialException e) {
+                throw e;
+            } catch (Exception e) {
+                throw new Exception("failed to check expiration: " + e.getMessage(), e);
             }
-            // Only meaningful against the proofs VerifyProof just validated: a
-            // challenge/domain that is not bound to a verified signature proves
-            // nothing about who the presentation was made for.
-            checkChallengeAndDomain(opts);
         }
-        if (opts.isCheckExpiration()) {
-            PresentationHelper.checkExpiration(presentationData, opts.getClockSkewLeewayMs());
+        if (o.isVerifyProof()) {
+            boolean ok;
+            try {
+                ok = presentationData.verifyProof(o.effectiveResolver(), o.getProofVerificationMethod());
+            } catch (Exception e) {
+                throw new Exception("failed to verify presentation: " + e.getMessage(), e);
+            }
+            if (!ok) {
+                throw new CredentialException(CredentialException.Code.INVALID_PROOF, "invalid proof");
+            }
+            // Only meaningful against the proofs verifyProof just validated: a challenge/domain that is not bound
+            // to a verified signature proves nothing about who the presentation was made for.
+            checkChallengeAndDomain(o);
         }
     }
 
-    // Enforces expectedChallenge / expectedDomain on EVERY verified proof (or only
-    // the proofVerificationMethod one), so a replayed proof cannot hide among
-    // others. Mirrors go-credential-sdk JSONPresentation.checkChallengeAndDomain.
-    private void checkChallengeAndDomain(PresentationOptions opts) throws Exception {
-        String expChallenge = opts.getExpectedChallenge();
-        String expDomain = opts.getExpectedDomain();
-        if (opts.isRequireAudience() && (expDomain == null || expDomain.isEmpty())) {
-            throw new Exception("WithRequireAudience needs WithExpectedDomain");
+    // Enforces expectedChallenge / expectedDomain on EVERY verified proof (or only the proofVerificationMethod
+    // one), so a replayed proof cannot hide among others.
+    private void checkChallengeAndDomain(PresentationOptions o) throws Exception {
+        String expChallenge = o.getExpectedChallenge();
+        String expDomain = o.getExpectedDomain();
+        if (o.isRequireAudience() && !nonEmpty(expDomain)) {
+            throw new AudienceUnboundException();
         }
-        boolean hasChallenge = expChallenge != null && !expChallenge.isEmpty();
-        boolean hasDomain = expDomain != null && !expDomain.isEmpty();
-        if (!hasChallenge && !hasDomain) {
+        if (!nonEmpty(expChallenge) && !nonEmpty(expDomain)) {
             return;
         }
-        String only = opts.getProofVerificationMethod();
-        for (Proof p : allProofs()) {
-            if (only != null && !only.isEmpty() && !only.equals(p.getVerificationMethod())) {
+        String only = o.getProofVerificationMethod();
+        for (Proof p : presentationData.proofs()) {
+            if (nonEmpty(only) && !only.equals(p.getVerificationMethod())) {
                 continue;
             }
-            if (hasChallenge && !expChallenge.equals(p.getChallenge())) {
-                throw new Exception("proof (" + p.getVerificationMethod() + "): challenge " + p.getChallenge()
-                        + " does not match expected " + expChallenge);
+            Object domain = p.getRaw() != null ? p.getRaw().get("domain") : p.getDomain();
+            if (nonEmpty(expChallenge) && !expChallenge.equals(p.getChallenge() == null ? "" : p.getChallenge())) {
+                throw new CredentialException(CredentialException.Code.INVALID_PROOF,
+                        "failed to verify presentation: proof (" + p.getVerificationMethod() + "): challenge "
+                                + p.getChallenge() + " does not match expected " + expChallenge);
             }
-            if (hasDomain && !PresentationAudience.audContains(p.getDomain(), expDomain)) {
-                throw new Exception("proof (" + p.getVerificationMethod() + "): domain " + p.getDomain()
-                        + " does not match expected " + expDomain);
+            if (nonEmpty(expDomain) && !PresentationAudience.audContains(domain, expDomain)) {
+                throw new CredentialException(CredentialException.Code.INVALID_PROOF,
+                        "failed to verify presentation: proof (" + p.getVerificationMethod() + "): domain " + domain
+                                + " does not match expected " + expDomain);
             }
         }
     }
 
-    private java.util.List<Proof> allProofs() {
-        java.util.List<Proof> proofs = new java.util.ArrayList<>();
-        Object raw = presentationData.get("proof");
-        if (raw instanceof Map<?, ?> map) {
-            proofs.add(MAPPER.convertValue(map, Proof.class));
-        } else if (raw instanceof Iterable<?> list) {
-            for (Object item : list) {
-                if (item instanceof Map<?, ?>) {
-                    proofs.add(MAPPER.convertValue(item, Proof.class));
-                }
-            }
+    private static void refuseReplaceOnJSONLD(PresentationOptions o) throws CredentialException {
+        if (o.isReplaceProof()) {
+            throw new CredentialException(CredentialException.Code.UNSUPPORTED_OPTION,
+                    "withReplaceProof does not apply to JSON-LD: proofs are appended to the proof set, not replaced; "
+                            + "build a new presentation without the proof to re-sign");
         }
-        return proofs;
+    }
+
+    private static boolean nonEmpty(String s) {
+        return s != null && !s.isEmpty();
     }
 }

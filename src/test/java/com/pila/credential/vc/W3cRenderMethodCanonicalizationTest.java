@@ -92,7 +92,8 @@ public class W3cRenderMethodCanonicalizationTest {
         String nquads = new String(Processor.canonicalizeDocument(doc), StandardCharsets.UTF_8);
         assertTrue(nquads.contains("<" + RENDER_IRI + ">"));
 
+        // Go's library Canonicalize (SafeMode) refuses renderProperty without the examples context.
         JSONCredential cred = JSONCredential.parseJSONCredential(V2_ONLY.getBytes(StandardCharsets.UTF_8));
-        assertEquals(32, cred.getSigningInput().length);
+        org.junit.jupiter.api.Assertions.assertThrows(Exception.class, cred::getSigningInput);
     }
 }

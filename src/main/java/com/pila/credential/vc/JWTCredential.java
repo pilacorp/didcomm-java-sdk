@@ -1,229 +1,220 @@
 package com.pila.credential.vc;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pila.credential.common.dto.Proof;
+import com.pila.credential.common.error.CredentialException;
+import com.pila.credential.common.error.SDJWTRequiresJOSEException;
 import com.pila.credential.common.jsonmap.JSONMap;
-import com.pila.credential.common.jwt.JWTSigner;
 import com.pila.credential.common.jwt.JWTVerifier;
+import com.pila.credential.common.jwt.SigningKey;
+import com.pila.credential.common.sdjwt.DecodedDisclosure;
 import com.pila.credential.common.signer.DefaultSignerProvider;
 import com.pila.credential.common.signer.SignerProvider;
+import com.pila.credential.common.util.Vcdm;
 
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.Base64;
-import java.util.HashMap;
+import java.util.HexFormat;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
- * JWTCredential represents a verifiable credential in JWT format.
+ * JWTCredential represents a VC 1.1 style credential in JWT format (typ JWT, claims under {@code vc}).
+ * Selective disclosure is not supported here: it is refused with {@link SDJWTRequiresJOSEException}; use
+ * {@link JOSECredential} (vc+sd-jwt).
  */
-public class JWTCredential implements Credential {
-    private String signingInput; // JWT header.payload (base64 encoded)
-    private CredentialData payloadData; // Parsed payload as CredentialData
-    private String signature; // JWT signature (if signed)
-    private String verificationMethodKey; // Verification method key
+public class JWTCredential implements SignableCredential {
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    private static final String DEFAULT_VERIFICATION_METHOD_KEY = "key-1";
+    private String signingInput; // header.payload (base64url)
+    private CredentialData payloadData; // the vc claim
+    private Map<String, Object> jwtClaims = new LinkedHashMap<>(); // top-level claims (iss, sub, exp, nbf, iat, jti)
+    private String signature = "";
+    private SigningKey signingKey = SigningKey.NONE; // VM the header names; NONE for a parsed credential
 
     private JWTCredential() {
-        this.verificationMethodKey = DEFAULT_VERIFICATION_METHOD_KEY;
+    }
+
+    public static JWTCredential newJWTCredential(CredentialContents vcc) throws Exception {
+        return newJWTCredential(vcc, null);
     }
 
     /**
-     * Creates a new JWTCredential from CredentialContents.
-     * 
-     * @param vcc The credential contents
-     * @return A new JWTCredential instance
-     * @throws Exception if creation fails
+     * Builds the unsigned token. The header's {@code kid} is the pinned VM ({@code withVerificationMethodKey}) or
+     * the issuer's latest active assertionMethod VM, and {@code alg} follows that VM's key (ES256 for P-256,
+     * ES256K for secp256k1), both resolved through the call's resolver.
      */
-    public static JWTCredential newJWTCredential(CredentialContents vcc) throws Exception {
-        // Convert CredentialContents to CredentialData
-        CredentialData m = CredentialHelper.serializeCredentialContents(vcc);
-        CredentialData payloadData = m;
-
-        // Extract other claims from credentialContents
-        Map<String, Object> otherClaims = new HashMap<>();
-        if (vcc.getIssuer() != null && !vcc.getIssuer().isEmpty()) {
-            otherClaims.put("iss", vcc.getIssuer());
+    public static JWTCredential newJWTCredential(CredentialContents vcc, CredentialOptions opts) throws Exception {
+        CredentialOptions o = CredentialOptions.orEmpty(opts);
+        // Refused before anything is built and before the DID is resolved: no network round trip for a call that
+        // cannot succeed.
+        if (o.hasSDOptions()) {
+            throw new SDJWTRequiresJOSEException("newJWTCredential");
         }
-        if (vcc.getSubject() != null && !vcc.getSubject().isEmpty() && vcc.getSubject().get(0).getId() != null) {
-            otherClaims.put("sub", vcc.getSubject().get(0).getId());
+        CredentialData m = CredentialHelper.serializeCredentialContents(vcc);
+        Map<String, Object> vcMap = MAPPER.readValue(MAPPER.writeValueAsBytes(m),
+                new TypeReference<LinkedHashMap<String, Object>>() {
+                });
+        if (CredentialSupport.carriesSDJWT(vcMap)) {
+            throw new SDJWTRequiresJOSEException("newJWTCredential: contents carry SD-JWT digests");
+        }
+
+        Map<String, Object> claims = new LinkedHashMap<>();
+        if (vcc.getIssuer() != null && !vcc.getIssuer().isEmpty()) {
+            claims.put("iss", vcc.getIssuer());
+        }
+        if (vcc.getSubject() != null && !vcc.getSubject().isEmpty() && vcc.getSubject().get(0).getId() != null
+                && !vcc.getSubject().get(0).getId().isEmpty()) {
+            claims.put("sub", vcc.getSubject().get(0).getId());
         }
         if (vcc.getValidUntil() != null) {
-            otherClaims.put("exp", vcc.getValidUntil().getEpochSecond());
+            claims.put("exp", vcc.getValidUntil().getEpochSecond());
         }
         if (vcc.getValidFrom() != null) {
             long epochSecond = vcc.getValidFrom().getEpochSecond();
-            otherClaims.put("iat", epochSecond);
-            otherClaims.put("nbf", epochSecond);
+            claims.put("iat", epochSecond);
+            claims.put("nbf", epochSecond);
         }
         if (vcc.getId() != null && !vcc.getId().isEmpty()) {
-            otherClaims.put("jti", vcc.getId());
+            claims.put("jti", vcc.getId());
         }
 
-        // Build payload with vc claim and other claims
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("vc", payloadData);
-        // Add other claims to payload
-        payload.putAll(otherClaims);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("vc", vcMap);
+        payload.putAll(claims);
 
-        // Build header
-        String verificationMethodKey = DEFAULT_VERIFICATION_METHOD_KEY;
-        Map<String, Object> header = new HashMap<>();
+        // Resolve the VM so alg reflects the key it holds and a missing or ungranted kid is caught here.
+        SigningKey key = SigningKey.resolve(vcc.getIssuer(), "assertionMethod", o.getVerificationMethodKey(),
+                o.effectiveResolver());
+        Map<String, Object> header = new LinkedHashMap<>();
         header.put("typ", "JWT");
-        header.put("alg", "ES256K");
-        header.put("kid", vcc.getIssuer() + "#" + verificationMethodKey);
+        header.put("alg", key.alg());
+        header.put("kid", key.id());
 
-        // Encode header and payload
-        ObjectMapper mapper = new ObjectMapper();
-        byte[] headerJSON = mapper.writeValueAsBytes(header);
-        String headerEncoded = Base64.getUrlEncoder().withoutPadding().encodeToString(headerJSON);
-
-        byte[] payloadJSON = mapper.writeValueAsBytes(payload);
-        String payloadEncoded = Base64.getUrlEncoder().withoutPadding().encodeToString(payloadJSON);
-
-        // Create signing input (header.payload)
-        String signingInput = headerEncoded + "." + payloadEncoded;
-
-        JWTCredential jwtCred = new JWTCredential();
-        jwtCred.signingInput = signingInput;
-        jwtCred.payloadData = payloadData;
-        jwtCred.signature = "";
-        jwtCred.verificationMethodKey = verificationMethodKey;
-
-        return jwtCred;
+        JWTCredential c = new JWTCredential();
+        c.signingInput = encode(header) + "." + encode(payload);
+        c.payloadData = new CredentialData(vcMap);
+        c.jwtClaims = claims;
+        c.signingKey = key;
+        c.executeOptions(o);
+        return c;
     }
 
-    /**
-     * Parses a JWTCredential from a raw JWT string.
-     * 
-     * @param rawJWT The raw JWT string
-     * @return A parsed JWTCredential instance
-     * @throws Exception if parsing fails
-     */
     public static JWTCredential parseJWTCredential(String rawJWT) throws Exception {
-        if (!CredentialParser.isJWTCredential(rawJWT)) {
+        return parseJWTCredential(rawJWT, null);
+    }
+
+    public static JWTCredential parseJWTCredential(String rawJWT, CredentialOptions opts) throws Exception {
+        String jwt = rawJWT == null ? "" : rawJWT.trim();
+        if (jwt.length() >= 2 && jwt.startsWith("\"") && jwt.endsWith("\"")) {
+            jwt = jwt.substring(1, jwt.length() - 1).trim();
+        }
+        // base64url has no "~", so a valid JWT never contains one: a "~" means the SD-JWT combined form.
+        if (jwt.contains("~")) {
+            throw new SDJWTRequiresJOSEException("parseJWTCredential: token is in SD-JWT combined form");
+        }
+        if (!CredentialParser.isJWTCredential(jwt)) {
             throw new Exception("invalid JWT format");
         }
-
-        // Remove surrounding quotes if present
-        rawJWT = rawJWT.trim();
-        if (rawJWT.startsWith("\"") && rawJWT.endsWith("\"")) {
-            rawJWT = rawJWT.substring(1, rawJWT.length() - 1);
+        String[] parts = jwt.split("\\.");
+        Map<String, Object> payloadMap;
+        try {
+            payloadMap = MAPPER.readValue(Base64.getUrlDecoder().decode(parts[1]),
+                    new TypeReference<LinkedHashMap<String, Object>>() {
+                    });
+        } catch (Exception e) {
+            throw new Exception("failed to decode payload: " + e.getMessage(), e);
         }
-
-        // Split JWT into parts
-        String[] parts = rawJWT.split("\\.");
-        if (parts.length < 2) {
-            throw new Exception("invalid JWT format");
+        // Digests in the signed payload make it an SD-JWT whether or not a disclosure came with it.
+        if (CredentialSupport.carriesSDJWT(payloadMap)) {
+            throw new SDJWTRequiresJOSEException("parseJWTCredential: payload carries SD-JWT digests");
         }
-
-        // Extract the payload and header
-        String headerEncoded = parts[0];
-        String payloadEncoded = parts[1];
-        String signature = "";
-        if (parts.length == 3) {
-            signature = parts[2];
-        }
-
-        // Decode the payload
-        byte[] payloadBytes = Base64.getUrlDecoder().decode(payloadEncoded);
-        ObjectMapper mapper = new ObjectMapper();
-        @SuppressWarnings("unchecked")
-        Map<String, Object> payloadMap = mapper.readValue(payloadBytes, Map.class);
-
-        // Store the vc claim in payload as payloadData
         Object vcData = payloadMap.get("vc");
         if (vcData == null) {
             throw new Exception("vc claim not found in JWT payload");
         }
-
         if (!(vcData instanceof Map)) {
             throw new Exception("vc claim is not a valid JSON object");
         }
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> vcMap = (Map<String, Object>) vcData;
+        JWTCredential c = new JWTCredential();
+        c.signingInput = parts[0] + "." + parts[1];
+        c.payloadData = new CredentialData(CredentialSupport.asMap(vcData));
+        c.jwtClaims = payloadMap;
+        c.signature = parts.length == 3 ? parts[2] : "";
+        c.executeOptions(CredentialOptions.orEmpty(opts));
+        return c;
+    }
 
-        // Create signing input (header.payload)
-        String signingInput = headerEncoded + "." + payloadEncoded;
-
-        JWTCredential jwtCred = new JWTCredential();
-        jwtCred.signingInput = signingInput;
-        jwtCred.payloadData = new CredentialData(vcMap);
-        jwtCred.signature = signature;
-
-        return jwtCred;
+    /** Signs with a raw secp256k1 key (hex), like Go {@code NewDefaultProvider}. Prefer a provider. */
+    @Override
+    public void addProof(String privKeyHex, CredentialOptions opts) throws Exception {
+        addProofByProvider(new DefaultSignerProvider(privKeyHex), opts);
     }
 
     @Override
-    public void addProof(String privKeyHex) throws Exception {
-        addProofByProvider(new DefaultSignerProvider(privKeyHex));
+    public void addProofByProvider(SignerProvider signerProvider, CredentialOptions opts) throws Exception {
+        if (signerProvider == null) {
+            throw new IllegalArgumentException("signer provider cannot be null");
+        }
+        CredentialOptions o = CredentialOptions.orEmpty(opts);
+        CredentialSupport.rejectBuildTimeOptions(o);
+        CredentialSupport.refuseOverwrite(signature, o);
+        executeOptions(o.forSigning());
+
+        byte[] digest = MessageDigest.getInstance("SHA-256").digest(signingInput.getBytes(StandardCharsets.UTF_8));
+        byte[] raw = signerProvider.sign(digest);
+        // Assigned only after Accept succeeds, so a failed call cannot clear a signature the credential had.
+        this.signature = signingKey.accept(signingInput, raw);
     }
 
     @Override
-    public void addProofByProvider(SignerProvider signerProvider) throws Exception {
-        String didBaseURL = CredentialConfig.getBaseURL();
-        String issuer = issuerDid();
-        com.pila.credential.common.verificationmethod.VerificationMethodResolver resolver =
-                new com.pila.credential.common.verificationmethod.VerificationMethodResolver(didBaseURL);
-        com.pila.credential.common.verificationmethod.ResolveVmUrl.resolveSigningVM(
-                issuer, "assertionMethod", this.verificationMethodKey, resolver);
-
-        JWTSigner signer = new JWTSigner(signerProvider);
-        String newSignature = signer.signString(signingInput);
-
-        // Verify-after-sign (atomic): verify before mutating credential state.
-        JWTVerifier verifier = new JWTVerifier(didBaseURL);
-        verifier.verifyJWT(signingInput + "." + newSignature);
-
-        this.signature = newSignature;
-    }
-
-    @Override
-    public byte[] getSigningInput() throws Exception {
+    public byte[] getSigningInput() {
         return signingInput.getBytes(StandardCharsets.UTF_8);
     }
 
+    /**
+     * Attaches a signature made outside the SDK over {@link #getSigningInput()}: 64-byte r||s (65 with a trailing
+     * recovery id is trimmed) that verifies against the VM the header names.
+     */
     @Override
-    public byte[] createProofSigning(byte[] docHash, Proof proof) throws Exception {
-        throw new UnsupportedOperationException("createProofSigning applies to JSON-LD credentials only");
-    }
-
-    @Override
-    public void addCustomProof(Proof proof) throws Exception {
+    public void addCustomProof(Proof proof, CredentialOptions opts) throws Exception {
         if (proof == null) {
             throw new IllegalArgumentException("proof cannot be null");
         }
-
         if (proof.getSignature() == null || proof.getSignature().length == 0) {
             throw new Exception("proof signature cannot be empty");
         }
-
-        byte[] sig64 = JWTSigner.normalizeJwtSignature(proof.getSignature());
-        this.signature = Base64.getUrlEncoder().withoutPadding().encodeToString(sig64);
+        CredentialOptions o = CredentialOptions.orEmpty(opts);
+        CredentialSupport.rejectBuildTimeOptions(o);
+        CredentialSupport.refuseOverwrite(signature, o);
+        executeOptions(o.forSigning());
+        this.signature = signingKey.accept(signingInput, proof.getSignature());
     }
 
     @Override
-    public void verify() throws Exception {
+    public void verify(CredentialOptions opts) throws Exception {
+        CredentialOptions o = CredentialOptions.orEmpty(opts).copy();
+        o.setVerifyProof(true);
+        executeOptions(o);
+    }
+
+    @Override
+    public Object serialize() {
+        return signature == null || signature.isEmpty() ? signingInput : signingInput + "." + signature;
+    }
+
+    @Override
+    public String hash() throws Exception {
         if (signature == null || signature.isEmpty()) {
-            throw new Exception("credential has no signature");
+            throw new Exception("credential must be signed before hashing");
         }
-
-        String didBaseURL = CredentialConfig.getBaseURL();
-        JWTVerifier verifier = new JWTVerifier(didBaseURL);
-        String serialized = (String) serialize();
-        verifier.verifyJWT(serialized);
-    }
-
-    @Override
-    public Object serialize() throws Exception {
-        if (signature != null && !signature.isEmpty()) {
-            // Signed JWT
-            return signingInput + "." + signature;
-        } else {
-            // Unsigned JWT
-            return signingInput;
-        }
+        byte[] d = MessageDigest.getInstance("SHA-256")
+                .digest(((String) serialize()).getBytes(StandardCharsets.UTF_8));
+        return HexFormat.of().formatHex(d);
     }
 
     @Override
@@ -236,47 +227,55 @@ public class JWTCredential implements Credential {
         return "JWT";
     }
 
-    /**
-     * Gets the credential data.
-     */
+    @Override
+    public Object extractField(String path) {
+        return Vcdm.extractField(payloadData, path);
+    }
+
+    /** A VC 1.1 JWT carries no disclosures; always empty (kept so callers asking every credential keep working). */
+    @Deprecated
+    public List<DecodedDisclosure> decodedDisclosures() {
+        return List.of();
+    }
+
+    /** Always refused: a VC 1.1 JWT carries no disclosures to choose from. */
+    @Deprecated
+    public Credential present(List<String> selectedDisclosures) throws Exception {
+        throw new SDJWTRequiresJOSEException("present");
+    }
+
     public CredentialData getPayloadData() {
         return payloadData;
     }
 
-    /**
-     * Gets the verification method key.
-     */
-    public String getVerificationMethodKey() {
-        return verificationMethodKey;
-    }
-
-    /**
-     * Sets the verification method key.
-     */
-    public void setVerificationMethodKey(String verificationMethodKey) {
-        this.verificationMethodKey = verificationMethodKey;
-    }
-
-    private String issuerDid() throws Exception {
-        String[] parts = signingInput.split("\\.");
-        byte[] payloadBytes = Base64.getUrlDecoder().decode(parts[1]);
-        ObjectMapper mapper = new ObjectMapper();
-        @SuppressWarnings("unchecked")
-        Map<String, Object> payload = mapper.readValue(payloadBytes, Map.class);
-        Object iss = payload.get("iss");
-        if (iss instanceof String s && !s.isEmpty()) {
-            return s;
-        }
-        byte[] headerBytes = Base64.getUrlDecoder().decode(parts[0]);
-        @SuppressWarnings("unchecked")
-        Map<String, Object> header = mapper.readValue(headerBytes, Map.class);
-        Object kid = header.get("kid");
-        if (kid instanceof String k) {
-            int hash = k.indexOf('#');
-            if (hash > 0) {
-                return k.substring(0, hash);
+    private void executeOptions(CredentialOptions o) throws Exception {
+        CredentialSupport.runContentChecks(payloadData, o);
+        if (o.isVerifyProof()) {
+            if (signature == null || signature.isEmpty()) {
+                throw new Exception("credential verification failed: credential is not signed");
+            }
+            try {
+                new JWTVerifier(o.effectiveResolver()).verifyJWT(signingInput + "." + signature);
+            } catch (Exception e) {
+                throw new CredentialException(CredentialException.Code.INVALID_PROOF,
+                        "credential verification failed: verify proof: " + e.getMessage(), e);
             }
         }
-        throw new Exception("issuer is missing or invalid");
+        if (o.isCheckExpiration()) {
+            // validFrom/validUntil describe the credential (inside vc); exp/nbf describe the token (beside it).
+            // The credential's own window is reported first.
+            try {
+                CredentialSupport.checkExpiration(payloadData, o.getClockSkewLeewayMs());
+                Vcdm.checkTimeClaims(jwtClaims, o.getClockSkewLeewayMs());
+            } catch (CredentialException e) {
+                throw e;
+            } catch (Exception e) {
+                throw new Exception("failed to check expiration: " + e.getMessage(), e);
+            }
+        }
+    }
+
+    private static String encode(Object value) throws Exception {
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(MAPPER.writeValueAsBytes(value));
     }
 }

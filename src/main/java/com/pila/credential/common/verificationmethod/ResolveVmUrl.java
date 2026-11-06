@@ -1,6 +1,5 @@
 package com.pila.credential.common.verificationmethod;
 
-import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -22,6 +21,24 @@ public final class ResolveVmUrl {
         return did + "#" + kid;
     }
 
+    /**
+     * Go ResolveVerificationMethodURLForKey: the id of the latest active VM whose key matches {@code kind}, so the
+     * resolved VM is compatible with the signer's cryptosuite.
+     */
+    public static String resolveVerificationMethodURLForKey(String did, String purpose,
+            VerificationMethodKeyKind kind, DocumentResolver resolver) throws Exception {
+        if (resolver == null) {
+            throw new Exception("document resolver is not configured");
+        }
+        DIDDocument doc;
+        try {
+            doc = resolver.resolveDocument(did);
+        } catch (Exception e) {
+            throw new Exception("failed to resolve DID '" + did + "': " + e.getMessage(), e);
+        }
+        return Selector.selectLatestActiveVMForKey(doc, purpose, kind).getId();
+    }
+
     public static SigningVM resolveSigningVM(String did, String purpose, String pinnedKid, DocumentResolver resolver)
             throws Exception {
         if (resolver == null) {
@@ -39,10 +56,7 @@ public final class ResolveVmUrl {
         } else {
             vm = Selector.selectDefaultSigningVM(doc, purpose);
         }
-        if (RevocationReasons.isHardRevocationReason(vm.getRevocationReason())) {
-            throw new Exception("verification method '" + vm.getId() + "' revoked with hard reason '"
-                    + vm.getRevocationReason() + "'");
-        }
+        // Go rejects only on `revoked`; a hard reason without `revoked` is a verify-time concern.
         if (vm.getRevoked() != null && !vm.getRevoked().isEmpty()) {
             throw new Exception("verification method '" + vm.getId() + "' was revoked at "
                     + rfc3339UTC(vm.getRevoked()));
@@ -77,18 +91,12 @@ public final class ResolveVmUrl {
     }
 
     private static String rfc3339UTC(String revoked) {
-        Instant instant;
         try {
-            instant = Instant.parse(revoked);
+            return DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")
+                    .format(OffsetDateTime.parse(revoked).withOffsetSameInstant(ZoneOffset.UTC));
         } catch (Exception e) {
-            try {
-                instant = OffsetDateTime.parse(revoked).toInstant();
-            } catch (Exception e2) {
-                return revoked;
-            }
+            return revoked;
         }
-        return DateTimeFormatter.ISO_INSTANT.format(instant.atOffset(ZoneOffset.UTC))
-                .replaceAll("\\.\\d{3}Z$", "Z");
     }
 
     public record SigningVM(VerificationMethodEntry vm, String url) {

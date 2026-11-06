@@ -72,11 +72,12 @@ public class P256MultikeyAndLegacyNegativeTest {
     }
 
     @Test
-    void publicKeyHex_withMultikeyType_isNotSecp256k1() {
+    void publicKeyHex_isSecp256k1_whateverTheType() {
+        // Go VMKeyKind/VMIsSecp256k1: any publicKeyHex is secp256k1; the type is not consulted (no type gating)
         VerificationMethodEntry vm = new VerificationMethodEntry();
         vm.setType("Multikey");
         vm.setPublicKeyHex("04" + "aa".repeat(64));
-        assertEquals(VerificationMethodKeyKind.UNKNOWN, VerificationMethodKeyKind.fromEntry(vm));
+        assertEquals(VerificationMethodKeyKind.SECP256K1, VerificationMethodKeyKind.fromEntry(vm));
     }
 
     @Test
@@ -104,6 +105,9 @@ public class P256MultikeyAndLegacyNegativeTest {
             CredentialConfig.init("http://127.0.0.1:" + server.getAddress().getPort());
             CredentialContents contents = new CredentialContents();
             contents.setIssuer(did);
+            contents.setSubject(java.util.List.of(new com.pila.credential.vc.Subject("did:example:subject", new java.util.HashMap<>())));
+            contents.setContext(java.util.List.of("https://www.w3.org/ns/credentials/v2"));
+            contents.setTypes(java.util.List.of("VerifiableCredential"));
             JSONCredential cred = JSONCredential.newJSONCredential(contents);
             cred.addProofByProvider(new P256SignerProvider(privHex));
             cred.verify();
@@ -216,6 +220,9 @@ public class P256MultikeyAndLegacyNegativeTest {
             CredentialConfig.init("http://127.0.0.1:" + server.getAddress().getPort());
             CredentialContents contents = new CredentialContents();
             contents.setIssuer(did);
+            contents.setSubject(java.util.List.of(new com.pila.credential.vc.Subject("did:example:subject", new java.util.HashMap<>())));
+            contents.setContext(java.util.List.of("https://www.w3.org/ns/credentials/v2"));
+            contents.setTypes(java.util.List.of("VerifiableCredential"));
             JSONCredential cred = JSONCredential.newJSONCredential(contents);
             assertThrows(Exception.class, () -> cred.addProofByProvider(new SignerProvider() {
                 @Override

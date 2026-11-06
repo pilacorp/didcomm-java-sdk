@@ -85,11 +85,33 @@ public final class SDJWT {
                 continue;
             }
             if (i == parts.length - 1 && isJWT(seg) && i > 1) {
-                break;
+                throw new Exception("SD-JWT carries a key binding JWT, which this SDK does not verify yet; "
+                        + "present the credential without it");
             }
             disclosures.add(seg);
         }
-        return new ParsedSDJWT(issuer, disclosures);
+        List<DecodedDisclosure> decoded;
+        try {
+            decoded = decodeDisclosures(disclosures);
+        } catch (Exception e) {
+            throw new Exception("failed to decode disclosures: " + e.getMessage(), e);
+        }
+        return new ParsedSDJWT(issuer, disclosures, decoded);
+    }
+
+    /** Decodes disclosure strings so a holder can see which claims they reveal. */
+    public static List<DecodedDisclosure> decodeDisclosures(List<String> disclosures) throws Exception {
+        List<DecodedDisclosure> out = new ArrayList<>();
+        if (disclosures == null) {
+            return out;
+        }
+        for (String d : disclosures) {
+            if (d == null || d.isEmpty()) {
+                continue;
+            }
+            out.add(new DecodedDisclosure(d, parseDisclosure(d)));
+        }
+        return out;
     }
 
     public static String buildSDJWTPresentation(String issuerSignedJWT, List<String> selectedDisclosures) {

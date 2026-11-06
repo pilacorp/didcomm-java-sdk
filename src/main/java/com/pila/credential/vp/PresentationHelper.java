@@ -1,11 +1,19 @@
 package com.pila.credential.vp;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pila.credential.common.util.Rfc3339;
+import com.pila.credential.common.util.VCUtil;
+import com.pila.credential.common.util.Vcdm;
 import com.pila.credential.vc.Credential;
+import com.pila.credential.vc.CredentialOptions;
+import com.pila.credential.vc.CredentialParser;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
 public final class PresentationHelper {
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private PresentationHelper() {
     }
@@ -22,22 +30,22 @@ public final class PresentationHelper {
 
         PresentationData vpJSON = new PresentationData();
         if (vpc.getContext() != null && !vpc.getContext().isEmpty()) {
-            vpJSON.put("@context", com.pila.credential.common.util.VCUtil.serializeContexts(vpc.getContext()));
+            vpJSON.put("@context", VCUtil.serializeContexts(vpc.getContext()));
         }
         if (vpc.getId() != null && !vpc.getId().isEmpty()) {
             vpJSON.put("id", vpc.getId());
         }
         if (vpc.getTypes() != null && !vpc.getTypes().isEmpty()) {
-            vpJSON.put("type", com.pila.credential.common.util.VCUtil.serializeTypes(vpc.getTypes()));
+            vpJSON.put("type", VCUtil.serializeTypes(vpc.getTypes()));
         }
         if (vpc.getHolder() != null && !vpc.getHolder().isEmpty()) {
             vpJSON.put("holder", vpc.getHolder());
         }
         if (vpc.getValidFrom() != null) {
-            vpJSON.put("validFrom", vpc.getValidFrom().toString());
+            vpJSON.put("validFrom", Rfc3339.format(vpc.getValidFrom()));
         }
         if (vpc.getValidUntil() != null) {
-            vpJSON.put("validUntil", vpc.getValidUntil().toString());
+            vpJSON.put("validUntil", Rfc3339.format(vpc.getValidUntil()));
         }
 
         List<Credential> vcs = vpc.getVerifiableCredentials();
@@ -48,12 +56,10 @@ public final class PresentationHelper {
                 if (vc == null) {
                     throw new Exception("credential at index " + i + " is nil");
                 }
-                Object serialized = vc.serialize();
-                list.add(serialized);
                 try {
-                    vc.verify();
+                    list.add(vc.serialize());
                 } catch (Exception e) {
-                    throw new Exception("failed to verify credential " + i + ": " + e.getMessage());
+                    throw new Exception("failed to serialize credential " + i + ": " + e.getMessage(), e);
                 }
             }
             vpJSON.put("verifiableCredential", list);
@@ -61,33 +67,50 @@ public final class PresentationHelper {
         return vpJSON;
     }
 
-    public static void verifyEmbeddedCredentials(PresentationData data) throws Exception {
+    /**
+     * Verifies every embedded credential (single object or array). Fails when there are none, like Go, so a
+     * presentation cannot pass VC validation by carrying nothing.
+     */
+    public static void verifyEmbeddedCredentials(PresentationData data, PresentationOptions options)
+            throws Exception {
         Object raw = data.get("verifiableCredential");
-        if (!(raw instanceof List<?> list)) {
-            return;
+        if (raw == null) {
+            throw new Exception("failed to verify presentation: credential input is nil");
         }
-        for (int i = 0; i < list.size(); i++) {
-            Object item = list.get(i);
-            byte[] bytes;
-            if (item instanceof String s) {
-                bytes = s.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-            } else {
-                bytes = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(item);
+        List<?> items = raw instanceof List<?> l ? l : List.of(raw);
+
+        CredentialOptions vcOpts = options.getVcOptions() != null ? options.getVcOptions().copyForPresentation()
+                : new CredentialOptions();
+        // The presentation's resolver and leeway are the defaults; options given to withVCValidation win.
+        if (vcOpts.getResolver() == null) {
+            vcOpts.setResolver(options.effectiveResolver());
+        }
+        if (vcOpts.getClockSkewLeewayMs() == 0) {
+            vcOpts.setClockSkewLeewayMs(options.getClockSkewLeewayMs());
+        }
+
+        for (int i = 0; i < items.size(); i++) {
+            Object item = items.get(i);
+            if (item == null) {
+                throw new Exception("credential at index " + i + " is nil");
             }
-            com.pila.credential.vc.Credential parsed = com.pila.credential.vc.CredentialParser.parseCredential(bytes);
-            parsed.verify();
+            Credential parsed;
+            try {
+                byte[] bytes = item instanceof String s ? s.getBytes(StandardCharsets.UTF_8)
+                        : MAPPER.writeValueAsBytes(item);
+                parsed = CredentialParser.parseCredential(bytes);
+            } catch (Exception e) {
+                throw new Exception("failed to parse credential at index " + i + ": " + e.getMessage(), e);
+            }
+            try {
+                parsed.verify(vcOpts);
+            } catch (Exception e) {
+                throw new Exception("failed to verify credential at index " + i + ": " + e.getMessage(), e);
+            }
         }
     }
 
     public static void checkExpiration(PresentationData data, long leewayMs) throws Exception {
-        Object until = data.get("validUntil");
-        if (!(until instanceof String s) || s.isEmpty()) {
-            return;
-        }
-        java.time.Instant expiry = java.time.Instant.parse(s);
-        java.time.Instant now = java.time.Instant.now().minusMillis(Math.max(leewayMs, 0));
-        if (!now.isBefore(expiry)) {
-            throw new Exception("presentation has expired");
-        }
+        Vcdm.checkValidityPeriod("presentation", data.get("validFrom"), data.get("validUntil"), leewayMs);
     }
 }

@@ -40,7 +40,8 @@ public final class Secp256k1 {
     }
 
     public static String addressFromPublicKey(byte[] pub) {
-        byte[] uncompressed = pub.length == 65 && pub[0] == 0x04 ? pub : decompress(pub);
+        // decodePoint rejects an off-curve uncompressed key too (Go crypto.UnmarshalPubkey)
+        byte[] uncompressed = decompress(pub);
         byte[] hash = Keccak256.hash(Arrays.copyOfRange(uncompressed, 1, uncompressed.length));
         return Hex.encode0x(Arrays.copyOfRange(hash, 12, 32)).toLowerCase();
     }

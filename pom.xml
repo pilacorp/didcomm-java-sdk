@@ -16,19 +16,7 @@
         <exec.mainClass>com.pila.Main</exec.mainClass>
     </properties>
 
-    <repositories>
-        <repository>
-            <id>jitpack.io</id>
-            <url>https://jitpack.io</url>
-        </repository>
-    </repositories>
-
     <dependencies>
-        <dependency>
-            <groupId>com.nimbusds</groupId>
-            <artifactId>nimbus-jose-jwt</artifactId>
-            <version>9.37.3</version>
-        </dependency>
         <dependency>
             <groupId>org.bouncycastle</groupId>
             <artifactId>bcprov-jdk18on</artifactId>
@@ -112,6 +100,7 @@
                     <excludes>
                         <!-- Demo entry points: runnable from the build (mvn exec:java),
                              kept out of the published library jar. -->
+                        <exclude>com/pila/Main*.class</exclude>
                         <exclude>com/pila/DecryptMain*.class</exclude>
                         <exclude>com/pila/VerifyMain*.class</exclude>
                         <!-- Sample JWEs are demo input only; nothing in the jar reads them. -->

@@ -34,13 +34,15 @@ public final class LegacyTx {
         byte[] unsignedRlp = Rlp.encodeList(toPayloads(unsigned));
         byte[] hash = Keccak256.hash(unsignedRlp);
         byte[] sig = signer.sign(hash);
-        int recId = sig[64] & 0xff;
-        if (recId >= 27) {
-            recId -= 27;
+        // go-ethereum WithSignature wants exactly 65 bytes and uses the signer's v as is (v = sig[64] + 35 + 2*chainId,
+        // the byte sum wrapping at 256): a 27/28 recovery byte is NOT normalized to 0/1.
+        if (sig == null || sig.length != 65) {
+            throw new Exception("wrong size for signature: got " + (sig == null ? 0 : sig.length) + ", want 65");
         }
+        int recId = (sig[64] + 35) & 0xff;
         BigInteger r = new BigInteger(1, Arrays.copyOfRange(sig, 0, 32));
         BigInteger s = new BigInteger(1, Arrays.copyOfRange(sig, 32, 64));
-        BigInteger v = BigInteger.valueOf(recId + 35L + 2L * chainId);
+        BigInteger v = BigInteger.valueOf(recId + 2L * chainId);
         List<byte[]> signed = new ArrayList<>();
         signed.add(raw(Rlp.encodeUint(BigInteger.valueOf(nonce))));
         signed.add(raw(Rlp.encodeUint(gasPrice == null ? BigInteger.ZERO : gasPrice)));
