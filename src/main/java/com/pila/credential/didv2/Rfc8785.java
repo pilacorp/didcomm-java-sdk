@@ -19,8 +19,11 @@ public final class Rfc8785 {
     private static final byte[] ASCII_ESCAPES = {'\\', '"', 'b', 'f', 'n', 'r', 't'};
     private static final byte[] BINARY_ESCAPES = {'\\', '"', '\b', '\f', '\n', '\r', '\t'};
 
+    private static final int MAX_DEPTH = 200;
+
     private final byte[] d;
     private int i;
+    private int depth;
 
     private Rfc8785(byte[] data) {
         this.d = data;
@@ -213,6 +216,7 @@ public final class Rfc8785 {
     }
 
     private byte[] parseArray() throws Exception {
+        enter();
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         out.write('[');
         boolean next = false;
@@ -227,13 +231,21 @@ public final class Rfc8785 {
         }
         scan();
         out.write(']');
+        depth--;
         return out.toByteArray();
+    }
+
+    private void enter() throws Exception {
+        if (++depth > MAX_DEPTH) {
+            throw new Exception("canonicalizer: nesting exceeds maximum depth");
+        }
     }
 
     private record Member(byte[] name, String sortKey, byte[] value) {
     }
 
     private byte[] parseObject() throws Exception {
+        enter();
         List<Member> members = new ArrayList<>();
         boolean next = false;
         while (peek() != '}') {
@@ -272,6 +284,7 @@ public final class Rfc8785 {
             out.writeBytes(members.get(k).value());
         }
         out.write('}');
+        depth--;
         return out.toByteArray();
     }
 

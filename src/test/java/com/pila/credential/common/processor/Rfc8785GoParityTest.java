@@ -39,6 +39,14 @@ class Rfc8785GoParityTest {
     }
 
     @Test
+    void capsNestingDepthAt200() throws Exception {
+        assertEquals("[".repeat(200) + "]".repeat(200), jcs("[".repeat(200) + "]".repeat(200)));
+        assertThrows(Exception.class, () -> jcs("[".repeat(201) + "]".repeat(201)));
+        assertThrows(Exception.class, () -> jcs("{\"a\":".repeat(201) + "1" + "}".repeat(201)));
+        assertThrows(Exception.class, () -> jcs("[".repeat(1_000_000))); // must not StackOverflowError
+    }
+
+    @Test
     void sortsAndEscapesLikeGo() throws Exception {
         assertEquals("[3,1,{\"a\":2,\"b\":1}]", jcs("[3,1,{\"b\":1,\"a\":2}]"));
         assertEquals("{\"a\":\"\u20ac\\n\",\"b\":\"\u00e9\"}", jcs("{\"b\":\"\\u00e9\",\"a\":\"\\u20ac\\n\"}"));
