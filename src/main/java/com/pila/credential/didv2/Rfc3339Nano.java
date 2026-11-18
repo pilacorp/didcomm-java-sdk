@@ -25,6 +25,11 @@ public final class Rfc3339Nano {
         if (text == null) {
             throw new Exception("parsing time \"null\" as RFC3339: malformed");
         }
+        try {
+            com.pila.credential.common.util.Rfc3339.parse(text); // the one RFC 3339 rule
+        } catch (java.time.format.DateTimeParseException e) {
+            throw new Exception("parsing time \"" + text + "\" as \"2006-01-02T15:04:05Z07:00\": " + e.getMessage(), e);
+        }
         Matcher m = RFC3339.matcher(text);
         if (!m.matches()) {
             throw new Exception("parsing time \"" + text + "\" as \"2006-01-02T15:04:05Z07:00\": malformed");

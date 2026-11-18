@@ -8,6 +8,7 @@ import com.pila.credential.common.schema.JsonSchemaValidator;
 import com.pila.credential.common.util.Vcdm;
 
 import java.net.URI;
+import com.pila.credential.common.util.BoundedHttp;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -25,7 +26,7 @@ final class CredentialSupport {
     /** Required on every credential by VCDM 2.0 sections 4.3, 4.5, 4.7, 4.8. */
     static final List<String> REQUIRED = List.of("@context", "type", "issuer", "credentialSubject");
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    private static final HttpClient HTTP = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).connectTimeout(Duration.ofSeconds(10)).build();
+    private static final HttpClient HTTP = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).connectTimeout(Duration.ofSeconds(10)).build();
 
     /** Properties a verifier decides on; they must never sit behind a disclosure. */
     private static final List<String> SECURED_CLAIMS = List.of(
@@ -200,11 +201,10 @@ final class CredentialSupport {
                 return Files.readAllBytes(Path.of(uri));
             }
             if ("http".equals(uri.getScheme()) || "https".equals(uri.getScheme())) {
-                HttpResponse<byte[]> resp = HTTP.send(
-                        HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(10)).GET().build(),
-                        HttpResponse.BodyHandlers.ofByteArray());
-                if (resp.statusCode() != 200) {
-                    throw new Exception("schema endpoint returned " + resp.statusCode());
+                BoundedHttp.Response resp = BoundedHttp.get(HTTP, uri, Map.of(), Duration.ofSeconds(10), 10,
+                        8 << 20, null);
+                if (resp.status() != 200) {
+                    throw new Exception("schema endpoint returned " + resp.status());
                 }
                 return resp.body();
             }

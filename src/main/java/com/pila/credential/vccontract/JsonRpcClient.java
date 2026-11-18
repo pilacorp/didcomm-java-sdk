@@ -17,6 +17,7 @@ import java.util.Map;
 public final class JsonRpcClient implements ReceiptSource, CallSource {
     private static final ObjectMapper JSON = new ObjectMapper();
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+    private static final int MAX_RESPONSE_BYTES = 8 << 20;
     private final URI uri;
 
     public JsonRpcClient(String rpcUrl) {
@@ -29,13 +30,19 @@ public final class JsonRpcClient implements ReceiptSource, CallSource {
     private JsonNode rpc(String method, List<Object> params) {
         try {
             String body = JSON.writeValueAsString(Map.of("jsonrpc", "2.0", "id", 1, "method", method, "params", params));
-            HttpResponse<String> res = http.send(HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(30))
+            long deadline = System.nanoTime() + Duration.ofSeconds(30).toNanos();
+            HttpResponse<java.io.InputStream> res = http.send(HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(30))
                     .header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build(),
-                    HttpResponse.BodyHandlers.ofString());
-            if (res.statusCode() / 100 != 2) {
-                throw new VcContractException(method + ": HTTP " + res.statusCode());
+                    HttpResponse.BodyHandlers.ofInputStream());
+            byte[] raw;
+            try (java.io.InputStream in = res.body()) {
+                if (res.statusCode() / 100 != 2) {
+                    throw new VcContractException(method + ": HTTP " + res.statusCode());
+                }
+                // the request timeout stops at the headers; this bounds the body too
+                raw = com.pila.credential.common.util.BoundedHttp.readBounded(in, deadline, MAX_RESPONSE_BYTES);
             }
-            JsonNode root = JSON.readTree(res.body());
+            JsonNode root = JSON.readTree(raw);
             if (root.hasNonNull("error")) {
                 throw new VcContractException(method + ": " + root.get("error"));
             }
@@ -59,7 +66,7 @@ public final class JsonRpcClient implements ReceiptSource, CallSource {
         try {
             st = status.startsWith("0x") && status.length() > 2 ? Long.parseLong(status.substring(2), 16) : 0;
         } catch (NumberFormatException e) {
-            throw new IllegalStateException("invalid receipt status: " + status, e);
+            throw new VcContractException("invalid receipt status: " + status, e);
         }
         List<Log> logs = new ArrayList<>();
         for (JsonNode l : r.path("logs")) {

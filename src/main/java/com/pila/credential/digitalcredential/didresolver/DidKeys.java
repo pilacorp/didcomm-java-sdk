@@ -34,7 +34,7 @@ final class DidKeys {
             if (jwk == null && !mb.isEmpty() && hx.isEmpty()) {
                 return multikey(mb);
             }
-            if (jwk == null && mb.isEmpty() && !hx.isEmpty()
+            if (jwk == null && mb.isEmpty() && !hx.isEmpty() && !hx.startsWith("0X") // Go strips only "0x"
                     && "EcdsaSecp256k1VerificationKey2019".equals(vm.get("type"))) {
                 return VerificationMethodMaterial.secp256k1PubFromHex(hx);
             }
@@ -44,16 +44,41 @@ final class DidKeys {
         return null;
     }
 
-    /** P-256 or secp256k1 public JWK (the curves Go's jwk.ToPublicKey reads here). */
+    /**
+     * P-256 or secp256k1 public JWK, as strict as Go's {@code jwk.ToPublicKey}: no private {@code d}, a
+     * secp256k1 key's alg/use/key_ops must allow verifying, coordinates exactly 32 bytes of strict base64url.
+     */
     private static PublicKey jwk(Object v) throws Exception {
-        if (!(v instanceof Map<?, ?>)) {
+        if (!(v instanceof Map<?, ?> m) || m.containsKey("d") || !"EC".equals(m.get("kty"))) {
+            return null;
+        }
+        Object crv = m.get("crv");
+        if (!"P-256".equals(crv) && !"secp256k1".equals(crv)) {
+            return null;
+        }
+        if ("secp256k1".equals(crv)) {
+            if (m.containsKey("alg") && !"ES256K".equals(m.get("alg"))) return null;
+            if (m.containsKey("use") && !"sig".equals(m.get("use"))) return null;
+            if (m.containsKey("key_ops") && !(m.get("key_ops") instanceof java.util.List<?> ops && ops.contains("verify"))) {
+                return null;
+            }
+        }
+        if (!(m.get("x") instanceof String x) || !(m.get("y") instanceof String y)
+                || !strictCoordinate(x) || !strictCoordinate(y)) {
             return null;
         }
         JWK j = MAPPER.convertValue(v, JWK.class);
-        if (!"P-256".equals(j.getCrv()) && !"secp256k1".equals(j.getCrv())) {
-            return null;
-        }
         return VerificationMethodMaterial.ecPubFromJwk(j);
+    }
+
+    /** RFC 7515 §2 base64url: no padding, line breaks or stray bits, and exactly 32 bytes (Go jose.DecodeSegment). */
+    private static boolean strictCoordinate(String s) {
+        try {
+            byte[] raw = java.util.Base64.getUrlDecoder().decode(s);
+            return raw.length == 32 && java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(raw).equals(s);
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
     }
 
     /** base58-btc Multikey of a P-256 public key; any other header, a secret key's included, skips the method. */

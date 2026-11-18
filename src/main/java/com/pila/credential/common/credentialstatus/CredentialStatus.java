@@ -7,10 +7,12 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.URI;
+import com.pila.credential.common.util.BoundedHttp;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.Map;
 import java.util.Base64;
 import java.util.zip.GZIPInputStream;
 
@@ -21,8 +23,9 @@ import java.util.zip.GZIPInputStream;
  */
 public final class CredentialStatus {
     private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final int MAX_RESPONSE_BYTES = 32 << 20;
     private static final int MAX_BITSTRING_BYTES = 16 << 20;
-    private static final HttpClient HTTP = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).connectTimeout(Duration.ofSeconds(10)).build();
+    private static final HttpClient HTTP = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).connectTimeout(Duration.ofSeconds(10)).build();
 
     /** Fetches the raw status list credential response for a URL. */
     @FunctionalInterface
@@ -37,11 +40,11 @@ public final class CredentialStatus {
         if (url == null || url.isEmpty()) {
             throw new Exception("statusListCredential URL is empty");
         }
-        HttpResponse<byte[]> resp = HTTP.send(
-                HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(10)).GET().build(),
-                HttpResponse.BodyHandlers.ofByteArray());
-        if (resp.statusCode() != 200) {
-            throw new Exception("status list credential API returned non-200 status: " + resp.statusCode());
+        // Go: http.Client{Timeout: 10s} bounds the whole exchange and follows up to 10 redirects (https to http too).
+        BoundedHttp.Response resp = BoundedHttp.get(HTTP, URI.create(url), Map.of(), Duration.ofSeconds(10), 10,
+                MAX_RESPONSE_BYTES, null);
+        if (resp.status() != 200) {
+            throw new Exception("status list credential API returned non-200 status: " + resp.status());
         }
         return resp.body();
     }

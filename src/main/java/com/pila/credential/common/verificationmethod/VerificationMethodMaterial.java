@@ -214,7 +214,7 @@ public final class VerificationMethodMaterial {
         if (doc.getAuthentication() != null) {
             for (String vmId : doc.getAuthentication()) {
                 if (vmId != null && !vmId.isEmpty()) {
-                    return publicKeyHexFromEntry(findVerificationMethod(resolver, vmId));
+                    return publicKeyHexFromEntry(findVerificationMethod(doc, vmId)); // same document, one resolution
                 }
             }
         }

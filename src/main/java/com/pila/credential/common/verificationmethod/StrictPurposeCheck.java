@@ -46,18 +46,12 @@ public final class StrictPurposeCheck {
         }
     }
 
-    private static final java.util.regex.Pattern RFC3339 = java.util.regex.Pattern.compile(
-            "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})");
-
-    /** Go's {@code time.Parse(time.RFC3339, s)}: upper-case T and Z only, no leap second. */
+    /** Go's {@code time.Parse(time.RFC3339, s)}, through the shared parser. */
     static Instant parseRfc3339(String s, String what) throws Exception {
-        if (s == null || !RFC3339.matcher(s).matches()) {
-            throw new Exception("invalid " + what + " timestamp '" + s + "': not RFC 3339");
-        }
         try {
-            return java.time.OffsetDateTime.parse(s).toInstant();
+            return com.pila.credential.common.util.Rfc3339.parse(s);
         } catch (java.time.format.DateTimeParseException e) {
-            throw new Exception("invalid " + what + " timestamp '" + s + "': " + e.getMessage(), e);
+            throw new Exception("invalid " + what + " timestamp '" + s + "': not RFC 3339", e);
         }
     }
 

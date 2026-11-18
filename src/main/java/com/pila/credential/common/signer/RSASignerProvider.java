@@ -23,6 +23,10 @@ public final class RSASignerProvider implements SignerProvider, AlgorithmProvide
         if (priv == null) {
             throw new IllegalArgumentException("rsa private key is nil");
         }
+        if (priv instanceof RSAKey k && k.getModulus().bitLength() < 1024) {
+            // Go refuses to sign with less, and both SDKs refuse to verify it
+            throw new IllegalArgumentException("rsa key is shorter than 1024 bits");
+        }
         this.alg = jwsAlg(alg);
         hashName(this.alg);
         this.signFn = digest -> signDigest(this.alg, priv, digest);

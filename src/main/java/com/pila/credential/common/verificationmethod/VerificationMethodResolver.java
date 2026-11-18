@@ -93,11 +93,25 @@ public class VerificationMethodResolver implements CredentialResolver {
             }
         }
 
+        DIDDocument doc;
         try {
-            return objectMapper.readValue(body, DIDDocument.class);
+            doc = objectMapper.readValue(body, DIDDocument.class);
         } catch (Exception e) {
             throw new Exception("failed to unmarshal DID document JSON: " + e.getMessage(), e);
         }
+        // Go decodes revoked into a *time.Time, so one malformed value fails the whole document.
+        if (doc != null && doc.getVerificationMethod() != null) {
+            for (VerificationMethodEntry vm : doc.getVerificationMethod()) {
+                if (vm.getRevoked() != null) {
+                    try {
+                        com.pila.credential.common.util.Rfc3339.parse(vm.getRevoked());
+                    } catch (java.time.format.DateTimeParseException e) {
+                        throw new Exception("failed to unmarshal DID document JSON: revoked is not RFC 3339", e);
+                    }
+                }
+            }
+        }
+        return doc;
     }
 
     public boolean checkVerificationMethod(String privateKey, String verificationMethod) throws Exception {

@@ -15,12 +15,16 @@ import java.util.regex.Pattern;
  * items, additionalItems, min/maxItems, uniqueItems, min/maxLength, pattern, minimum/maximum (+exclusive),
  * multipleOf, min/maxProperties, allOf/anyOf/oneOf/not, if/then/else and local {@code $ref}
  * ({@code #}, {@code #/definitions/...}). Not supported and refused rather than ignored: remote {@code $ref}.
- * {@code format} is enforced for date-time, date, email, uri, ipv4 and uuid (as gojsonschema does); other
- * formats are annotations. Regexes run under a time budget (Go uses linear-time RE2).
+ * {@code format} follows gojsonschema's 17 checkers ({@link FormatChecks}), on strings and numbers. Regexes
+ * run under one time budget per validation (Go uses linear-time RE2).
  */
 public final class JsonSchemaValidator {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+    /** One budget for a whole validation: both the schema and the value come from the credential. */
+    private static final long VALIDATION_BUDGET_NANOS = 2_000_000_000L;
+
+    private final long deadline = System.nanoTime() + VALIDATION_BUDGET_NANOS;
     private final JsonNode root;
     private final List<String> errors = new ArrayList<>();
 
@@ -37,11 +41,8 @@ public final class JsonSchemaValidator {
         return v.errors;
     }
 
-    private static final long REGEX_BUDGET_NANOS = 1_000_000_000L;
-
     /** Unanchored regex match that gives up (as an error) instead of backtracking forever on a hostile pattern. */
-    private static boolean find(String regex, String s) throws Exception {
-        long deadline = System.nanoTime() + REGEX_BUDGET_NANOS;
+    private boolean find(String regex, String s) throws Exception {
         CharSequence guarded = new CharSequence() {
             public int length() { return s.length(); }
             public char charAt(int i) {
@@ -54,23 +55,10 @@ public final class JsonSchemaValidator {
         try {
             return Pattern.compile(regex).matcher(guarded).find();
         } catch (IllegalStateException e) {
-            throw new Exception("schema pattern \"" + regex + "\" exceeded its time budget");
-        }
-    }
-
-    private static boolean formatOk(String format, String s) {
-        try {
-            switch (format) {
-                case "date-time": com.pila.credential.common.util.Rfc3339.parse(s); return true;
-                case "date": java.time.LocalDate.parse(s); return true;
-                case "email": return s.matches("[^@\\s]+@[^@\\s]+");
-                case "uri": return java.net.URI.create(s).isAbsolute();
-                case "ipv4": return s.matches("((25[0-5]|2[0-4]\\d|1?\\d?\\d)\\.){3}(25[0-5]|2[0-4]\\d|1?\\d?\\d)");
-                case "uuid": return s.matches("(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
-                default: return true;
-            }
-        } catch (RuntimeException e) {
-            return false;
+            throw new Exception("schema validation exceeded its time budget");
+        } catch (StackOverflowError e) {
+            // java.util.regex recurses on alternation; a long value must not escape verify() as an Error.
+            throw new Exception("schema pattern \"" + regex + "\" is too deep to match this value");
         }
     }
 
@@ -133,11 +121,14 @@ public final class JsonSchemaValidator {
             if (schema.has("pattern") && !find(schema.get("pattern").asText(), s)) {
                 errors.add(path + ": does not match pattern " + schema.get("pattern").asText());
             }
-            if (schema.has("format") && !formatOk(schema.get("format").asText(), s)) {
+            if (schema.has("format") && !FormatChecks.isFormat(schema.get("format").asText(), s)) {
                 errors.add(path + ": does not match format " + schema.get("format").asText());
             }
         }
         if (inst.isNumber()) {
+            if (schema.has("format") && !FormatChecks.isFormat(schema.get("format").asText(), null)) {
+                errors.add(path + ": does not match format " + schema.get("format").asText());
+            }
             BigDecimal n = inst.decimalValue();
             cmp(schema, "minimum", n, path, c -> c < 0, ">=");
             cmp(schema, "maximum", n, path, c -> c > 0, "<=");

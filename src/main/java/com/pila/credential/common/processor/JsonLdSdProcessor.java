@@ -91,7 +91,13 @@ public final class JsonLdSdProcessor {
         });
     }
 
-    public static List<String> toRdfNQuads(Object doc) throws Exception {
+    @SuppressWarnings("unchecked")
+    public static List<String> toRdfNQuads(Object input) throws Exception {
+        // ecdsa-sd base sign/verify/disclose come through here: numbers must read as Go's do (see
+        // goDoubleLexicals). A compacted selection is expanded first, an already expanded list is used as is.
+        Object doc = input instanceof Map<?, ?> m
+                ? goDoubleLexicals(expandJsonLd((Map<String, Object>) m))
+                : goDoubleLexicals(input);
         return JsonLdLimits.guard("to rdf", () -> {
             JsonDocument document = toDocument(doc);
             JsonLdOptions opts = sdOptions();
@@ -189,6 +195,9 @@ public final class JsonLdSdProcessor {
             return out;
         }
         if (node instanceof Map<?, ?> m) {
+            if ("@json".equals(m.get("@type"))) {
+                return node; // a JSON literal keeps its own number text
+            }
             Map<String, Object> out = new java.util.LinkedHashMap<>();
             for (Map.Entry<?, ?> e : m.entrySet()) out.put((String) e.getKey(), goDoubleLexicals(e.getValue()));
             if (out.get("@value") instanceof Double d) {

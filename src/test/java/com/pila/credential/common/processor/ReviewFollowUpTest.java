@@ -57,4 +57,39 @@ class ReviewFollowUpTest {
                 + s + "i> \"1.0E21\"" + x + "double> .\n";
         assertEquals(expected, new String(Processor.canonicalizeDocumentNativeTypes(doc), StandardCharsets.UTF_8));
     }
+
+    /** Accepted/refused as Go's time.Parse(time.RFC3339, s) does (go1.26). */
+    @Test
+    void rfc3339MatchesGo() {
+        for (String ok : new String[] {"2024-01-01T00:00:00,5Z", "2024-01-01T00:00:00+19:00", "2024-01-01T00:00:00+24:00",
+                "2024-01-01T00:00:00-00:60", "2024-01-01T00:00:00.1234567890123Z"}) {
+            assertNotNull(Rfc3339.parse(ok), ok);
+        }
+        for (String bad : new String[] {"2024-01-01T00:00:00+25:00", "2024-01-01T00:00:00+00:61",
+                "2024-01-01T24:00:00Z", "2024-02-30T00:00:00Z", "2024-01-01T00:00:60Z", "2024-01-01t00:00:00Z"}) {
+            assertThrows(DateTimeParseException.class, () -> Rfc3339.parse(bad), bad);
+        }
+        assertEquals(Rfc3339.parse("2024-01-01T00:00:00-00:60"), Rfc3339.parse("2024-01-01T01:00:00Z"));
+    }
+
+    @Test
+    void schemaRegexBudgetIsPerValidationAndStackSafe() throws Exception {
+        StringBuilder props = new StringBuilder();
+        StringBuilder inst = new StringBuilder();
+        for (int i = 0; i < 30; i++) {
+            props.append(i > 0 ? "," : "").append("\"p").append(i).append("\":{\"pattern\":\"(.*a){8}x\"}");
+            inst.append(i > 0 ? "," : "").append("\"p").append(i).append("\":\"").append("a".repeat(27)).append('"');
+        }
+        byte[] schema = ("{\"properties\":{" + props + "}}").getBytes(StandardCharsets.UTF_8);
+        Map<String, Object> value = new com.fasterxml.jackson.databind.ObjectMapper().readValue(
+                "{" + inst + "}", new com.fasterxml.jackson.core.type.TypeReference<>() {
+                });
+        long t0 = System.nanoTime();
+        assertThrows(Exception.class, () -> JsonSchemaValidator.validate(schema, value));
+        assertTrue((System.nanoTime() - t0) / 1e9 < 6, "bounded as a whole");
+
+        byte[] deep = "{\"type\":\"string\",\"pattern\":\"^(a|b)*$\"}".getBytes(StandardCharsets.UTF_8);
+        // a StackOverflowError would fail this assertThrows (it is an Error, not an Exception)
+        assertThrows(Exception.class, () -> JsonSchemaValidator.validate(deep, "ab".repeat(20_000)));
+    }
 }

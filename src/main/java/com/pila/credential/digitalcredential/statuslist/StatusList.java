@@ -80,6 +80,10 @@ public final class StatusList {
             throw new Exception("statuslist: bits " + bits + ", want 1, 2, 4 or 8");
         }
         byte[] raw = Base64.getUrlDecoder().decode(lst);
+        // Go's jose.DecodeSegment: raw base64url only, no padding and no stray trailing bits.
+        if (!Base64.getUrlEncoder().withoutPadding().encodeToString(raw).equals(lst)) {
+            throw new Exception("statuslist: lst is not strict base64url");
+        }
         if (raw.length >= 2 && (raw[1] & 0x20) != 0) {
             throw new Exception("statuslist: lst uses a preset dictionary");
         }

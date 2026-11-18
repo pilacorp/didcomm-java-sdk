@@ -437,8 +437,7 @@ public class JSONMap extends HashMap<String, Object> {
             throw new Exception("JSONMap has no proof");
         }
 
-        boolean matched = proofVerificationMethod == null || proofVerificationMethod.isEmpty();
-        for (Object raw : proofs) {
+                for (Object raw : proofs) {
             Proof proof = parseRawToProof(raw);
             if (proofVerificationMethod != null && !proofVerificationMethod.isEmpty()) {
                 if (!proofVerificationMethod.equals(proof.getVerificationMethod())) {
@@ -451,7 +450,7 @@ public class JSONMap extends HashMap<String, Object> {
                 return false;
             }
         }
-        if (!matched) {
+        if (proofVerificationMethod != null && !proofVerificationMethod.isEmpty()) {
             throw new Exception("no proof bound to verification method " + proofVerificationMethod);
         }
         return true;
@@ -819,9 +818,10 @@ public class JSONMap extends HashMap<String, Object> {
         }
         Map<String, Object> cfg = new LinkedHashMap<>();
         if (proof.getRaw() != null) {
-            // Go's dto.Proof.ToMap() is omitempty: drop empty-string members.
+            // Go's dto.Proof.ToMap() is omitempty only for its typed scalar fields. domain, previousProof
+            // and every extra member keep an empty string (it hashes a triple in Go).
             proof.getRaw().forEach((k, v) -> {
-                if (!(v instanceof String s && s.isEmpty())) {
+                if (!(v instanceof String s && s.isEmpty() && OMIT_WHEN_EMPTY.contains(k))) {
                     cfg.put(k, v);
                 }
             });
@@ -842,6 +842,9 @@ public class JSONMap extends HashMap<String, Object> {
         return objectMapper.readValue(objectMapper.writeValueAsBytes(cfg), new TypeReference<Map<String, Object>>() {
         });
     }
+
+    private static final java.util.Set<String> OMIT_WHEN_EMPTY = java.util.Set.of("id", "type", "created", "expires",
+            "verificationMethod", "proofPurpose", "cryptosuite", "challenge", "nonce", "proofValue", "jws");
 
     private static void putIfSet(Map<String, Object> m, String k, String v) {
         if (v != null && !v.isEmpty()) {

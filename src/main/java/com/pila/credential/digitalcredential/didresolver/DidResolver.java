@@ -57,7 +57,9 @@ public final class DidResolver {
         }
     }
 
-    private static final ObjectMapper MAPPER = new ObjectMapper()
+    private static final ObjectMapper MAPPER = new ObjectMapper(com.fasterxml.jackson.core.JsonFactory.builder()
+            .streamReadConstraints(com.fasterxml.jackson.core.StreamReadConstraints.builder().maxNestingDepth(64).build())
+            .build())
             .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
             .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
     private static final String DID_NS = "https://www.w3.org/ns/did#";
@@ -165,7 +167,15 @@ public final class DidResolver {
     static Map<String, Object> parseResolution(byte[] body, String did) throws Exception {
         Map<String, Object> top;
         try {
-            top = MAPPER.readValue(body, new TypeReference<LinkedHashMap<String, Object>>() {
+            // Go's jose.DecodeJSON: valid UTF-8 only (no encoded surrogates), no BOM, nesting at most 64.
+            String text = java.nio.charset.StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+                    .decode(java.nio.ByteBuffer.wrap(body)).toString();
+            if (text.startsWith("\uFEFF")) {
+                throw new IllegalArgumentException("BOM");
+            }
+            top = MAPPER.readValue(text, new TypeReference<LinkedHashMap<String, Object>>() {
             });
         } catch (Exception e) {
             throw fault("invalid resolver response: not a valid JSON object"); // no cause: it may quote the body

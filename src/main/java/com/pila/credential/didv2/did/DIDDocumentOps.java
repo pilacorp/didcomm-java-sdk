@@ -21,6 +21,13 @@ import java.util.List;
  * {@code time.Time} (RFC3339Nano).
  */
 public final class DIDDocumentOps {
+    /** Go ErrAlreadyRevoked: the verification method is already revoked and the change is refused. */
+    public static class AlreadyRevokedException extends Exception {
+        public AlreadyRevokedException(String message) {
+            super(message);
+        }
+    }
+
     public static final String CID_CONTEXT = "https://www.w3.org/ns/cid/v1";
     public static final String SECP256K1_VM_TYPE = "EcdsaSecp256k1VerificationKey2019";
     public static final String MULTIKEY_VM_TYPE = "Multikey";
@@ -116,7 +123,7 @@ public final class DIDDocumentOps {
             throw new Exception("verification method not found: " + oldKid);
         }
         if (old.getRevoked() != null && !old.getRevoked().isEmpty()) {
-            throw new Exception("verification method \"" + old.getId() + "\" is already revoked");
+            throw new AlreadyRevokedException("verification method \"" + old.getId() + "\" is already revoked");
         }
         List<VerificationPurpose> purposes = purposesOfKid(doc, old.getId());
         String newID = addVerificationMethod(doc, newVM, purposes);
@@ -157,9 +164,10 @@ public final class DIDDocumentOps {
             if (RevocationReasons.isHardRevocationReason(reason)
                     && !RevocationReasons.isHardRevocationReason(vm.getRevocationReason())) {
                 vm.setRevocationReason(reason);
+                ensureContext(doc, CID_CONTEXT);
                 return;
             }
-            throw new Exception("verification method \"" + vm.getId() + "\" is already revoked at "
+            throw new AlreadyRevokedException("verification method \"" + vm.getId() + "\" is already revoked at "
                     + vm.getRevoked() + " (reason: " + vm.getRevocationReason() + ")");
         }
         OffsetDateTime at = revokedAt == null ? OffsetDateTime.now(java.time.ZoneOffset.UTC) : revokedAt;

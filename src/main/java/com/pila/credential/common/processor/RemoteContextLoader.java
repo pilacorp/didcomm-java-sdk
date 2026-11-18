@@ -260,10 +260,14 @@ public final class RemoteContextLoader {
     }
 
     /**
-     * Resolves the host and refuses if any address is non-public. ponytail: the JDK client cannot be
-     * pinned to the checked address, so a DNS answer that changes between this check and the connect
-     * (rebinding) is not caught; Go checks the dialed address. Pin by supplying a client whose
-     * socket factory connects to the address returned here.
+     * Resolves the host and refuses if any address is non-public. ponytail: {@code java.net.http.HttpClient}
+     * cannot be pinned to the checked address (no socket factory or custom DNS hook), so the client resolves
+     * again on connect. Both lookups normally hit the JVM's positive DNS cache, which leaves only the moment
+     * an entry expires between the two; with {@code networkaddress.cache.ttl=0} the window is always open.
+     * Go checks the dialed address in {@code Dialer.Control}. Deployments that load contexts from untrusted
+     * documents should keep the default cache (30 s) or higher, or serve contexts from a trusted mirror.
+     * Closing it fully needs an HTTP client that accepts a custom resolver (e.g. OkHttp's {@code Dns}).
+     * {@code didresolver.HttpTransport} uses the same check and has the same limit.
      */
     static void refuseNonPublic(URI uri) throws Exception {
         String host = uri.getHost();
