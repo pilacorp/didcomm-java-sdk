@@ -227,6 +227,9 @@ public class Crypto {
         if (hash == null || !(alg.startsWith("RS") || alg.startsWith("PS"))) {
             throw new Exception("unsupported JWS alg: " + alg);
         }
+        if (pub.getModulus().bitLength() < 1024) {
+            throw new Exception("RSA key is shorter than 1024 bits");
+        }
         byte[] digest = java.security.MessageDigest.getInstance(hash).digest(signingInput);
         boolean ok;
         if (alg.startsWith("RS")) {

@@ -9,6 +9,7 @@ import lombok.Setter;
  */
 @Getter
 @Setter
+@com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
 public class VerificationMethodEntry {
     @JsonProperty("id")
     private String id;

@@ -15,7 +15,8 @@ import java.util.regex.Pattern;
  * items, additionalItems, min/maxItems, uniqueItems, min/maxLength, pattern, minimum/maximum (+exclusive),
  * multipleOf, min/maxProperties, allOf/anyOf/oneOf/not, if/then/else and local {@code $ref}
  * ({@code #}, {@code #/definitions/...}). Not supported and refused rather than ignored: remote {@code $ref}.
- * {@code format} is annotation-only, as in draft-07.
+ * {@code format} is enforced for date-time, date, email, uri, ipv4 and uuid (as gojsonschema does); other
+ * formats are annotations. Regexes run under a time budget (Go uses linear-time RE2).
  */
 public final class JsonSchemaValidator {
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -34,6 +35,43 @@ public final class JsonSchemaValidator {
         JsonSchemaValidator v = new JsonSchemaValidator(schema);
         v.check(schema, inst, "(root)", 0);
         return v.errors;
+    }
+
+    private static final long REGEX_BUDGET_NANOS = 1_000_000_000L;
+
+    /** Unanchored regex match that gives up (as an error) instead of backtracking forever on a hostile pattern. */
+    private static boolean find(String regex, String s) throws Exception {
+        long deadline = System.nanoTime() + REGEX_BUDGET_NANOS;
+        CharSequence guarded = new CharSequence() {
+            public int length() { return s.length(); }
+            public char charAt(int i) {
+                if (System.nanoTime() > deadline) throw new IllegalStateException("regex time budget exceeded");
+                return s.charAt(i);
+            }
+            public CharSequence subSequence(int a, int b) { return s.subSequence(a, b); }
+            public String toString() { return s; }
+        };
+        try {
+            return Pattern.compile(regex).matcher(guarded).find();
+        } catch (IllegalStateException e) {
+            throw new Exception("schema pattern \"" + regex + "\" exceeded its time budget");
+        }
+    }
+
+    private static boolean formatOk(String format, String s) {
+        try {
+            switch (format) {
+                case "date-time": com.pila.credential.common.util.Rfc3339.parse(s); return true;
+                case "date": java.time.LocalDate.parse(s); return true;
+                case "email": return s.matches("[^@\\s]+@[^@\\s]+");
+                case "uri": return java.net.URI.create(s).isAbsolute();
+                case "ipv4": return s.matches("((25[0-5]|2[0-4]\\d|1?\\d?\\d)\\.){3}(25[0-5]|2[0-4]\\d|1?\\d?\\d)");
+                case "uuid": return s.matches("(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+                default: return true;
+            }
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     private boolean check(JsonNode schema, JsonNode inst, String path, int depth) throws Exception {
@@ -92,8 +130,11 @@ public final class JsonSchemaValidator {
             if (schema.has("maxLength") && len > schema.get("maxLength").asInt()) {
                 errors.add(path + ": string length must be <= " + schema.get("maxLength"));
             }
-            if (schema.has("pattern") && !Pattern.compile(schema.get("pattern").asText()).matcher(s).find()) {
+            if (schema.has("pattern") && !find(schema.get("pattern").asText(), s)) {
                 errors.add(path + ": does not match pattern " + schema.get("pattern").asText());
+            }
+            if (schema.has("format") && !formatOk(schema.get("format").asText(), s)) {
+                errors.add(path + ": does not match format " + schema.get("format").asText());
             }
         }
         if (inst.isNumber()) {
@@ -196,7 +237,7 @@ public final class JsonSchemaValidator {
                 Iterator<String> pn = patterns.fieldNames();
                 while (pn.hasNext()) {
                     String p = pn.next();
-                    if (Pattern.compile(p).matcher(name).find()) {
+                    if (find(p, name)) {
                         matched = true;
                         check(patterns.get(p), inst.get(name), path + "." + name, depth + 1);
                     }

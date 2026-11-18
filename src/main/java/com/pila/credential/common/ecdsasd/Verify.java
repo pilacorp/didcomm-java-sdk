@@ -101,23 +101,24 @@ final class Verify {
 
     static void verifyProof(Map<String, Object> document, Map<String, Object> proofConfig, String proofValue,
             PublicKey issuerPub) throws Exception {
-        try {
-            ProofValue.decodeProofValue(proofValue, ProofValue.BASE_PROOF_HEADER);
+        // Go picks the verifier by header and returns that verifier's own error.
+        if (decodes(proofValue, ProofValue.BASE_PROOF_HEADER)) {
             verifyBaseProof(document, proofConfig, proofValue, issuerPub);
             return;
-        } catch (Exception ignored) {
-            // try derived
         }
-        try {
-            ProofValue.decodeProofValue(proofValue, ProofValue.DERIVED_PROOF_HEADER);
+        if (decodes(proofValue, ProofValue.DERIVED_PROOF_HEADER)) {
             verifyDerivedProof(document, proofConfig, proofValue, issuerPub);
             return;
-        } catch (Exception e) {
-            if (e.getMessage() != null && (e.getMessage().startsWith("ecdsasd: issuer")
-                    || e.getMessage().contains("statement"))) {
-                throw e;
-            }
         }
         throw new Exception("ecdsasd: unrecognized proof value header");
+    }
+
+    private static boolean decodes(String proofValue, byte[] header) {
+        try {
+            ProofValue.decodeProofValue(proofValue, header);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 }

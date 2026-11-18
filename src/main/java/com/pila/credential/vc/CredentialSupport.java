@@ -25,7 +25,7 @@ final class CredentialSupport {
     /** Required on every credential by VCDM 2.0 sections 4.3, 4.5, 4.7, 4.8. */
     static final List<String> REQUIRED = List.of("@context", "type", "issuer", "credentialSubject");
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+    private static final HttpClient HTTP = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).connectTimeout(Duration.ofSeconds(10)).build();
 
     /** Properties a verifier decides on; they must never sit behind a disclosure. */
     private static final List<String> SECURED_CLAIMS = List.of(

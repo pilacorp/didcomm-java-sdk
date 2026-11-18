@@ -55,7 +55,7 @@ public final class JsonLdSdProcessor {
         if (doc == null) {
             throw new IllegalArgumentException("canonicalize: document is nil");
         }
-        return JsonLdLimits.guard("canonicalize", () -> canonicalizeDocumentWithIdMap(toDocument(expandJsonLd(doc))));
+        return JsonLdLimits.guard("canonicalize", () -> canonicalizeDocumentWithIdMap(toDocument(goDoubleLexicals(expandJsonLd(doc)))));
     }
 
     public static CanonicalizeResult canonicalizeNQuadsWithIdMap(List<String> nquads) throws Exception {
@@ -166,14 +166,49 @@ public final class JsonLdSdProcessor {
         }
         if (value instanceof Number n) {
             // Go decodes every JSON number into float64 (so 2^53+1 loses its low bit) and json-gold
-            // then types an integral value below 1e21 as xsd:integer and the rest as xsd:double.
+            // types it xsd:integer iff float64(int64(v)) == v, i.e. integral and within int64.
             double d = n.doubleValue();
-            if (d == Math.rint(d) && Math.abs(d) < 1e21) {
+            if (d == Math.rint(d) && d >= -0x1p63 && d < 0x1p63) {
                 return new java.math.BigDecimal(d).toBigInteger();
             }
             return d;
         }
         return value;
+    }
+
+    /**
+     * Titanium prints a native double with 14 decimals; json-gold prints {@code %1.15E} (trailing zeros
+     * trimmed). In the expanded form, a double value becomes that lexical string, typed {@code xsd:double}
+     * unless a term's coercion already gave it a type (then Go's literal keeps that type too).
+     */
+    @SuppressWarnings("unchecked")
+    private static Object goDoubleLexicals(Object node) {
+        if (node instanceof List<?> list) {
+            List<Object> out = new ArrayList<>(list.size());
+            for (Object item : list) out.add(goDoubleLexicals(item));
+            return out;
+        }
+        if (node instanceof Map<?, ?> m) {
+            Map<String, Object> out = new java.util.LinkedHashMap<>();
+            for (Map.Entry<?, ?> e : m.entrySet()) out.put((String) e.getKey(), goDoubleLexicals(e.getValue()));
+            if (out.get("@value") instanceof Double d) {
+                out.put("@value", goDoubleLexical(d));
+                out.putIfAbsent("@type", "http://www.w3.org/2001/XMLSchema#double");
+            }
+            return out;
+        }
+        return node;
+    }
+
+    /** json-gold's {@code %1.15E}: 16 significant digits, exact rounding, mantissa trimmed to >= 1 decimal. */
+    static String goDoubleLexical(double d) {
+        java.math.BigDecimal bd = new java.math.BigDecimal(d)
+                .round(new java.math.MathContext(16, java.math.RoundingMode.HALF_EVEN));
+        String digits = bd.unscaledValue().abs().toString();
+        int exp = digits.length() - bd.scale() - 1;
+        String m = digits.replaceAll("0+$", "");
+        if (m.isEmpty()) m = "0";
+        return (d < 0 ? "-" : "") + m.charAt(0) + "." + (m.length() > 1 ? m.substring(1) : "0") + "E" + exp;
     }
 
     static List<String> splitNQuadsKeepNl(String s) {

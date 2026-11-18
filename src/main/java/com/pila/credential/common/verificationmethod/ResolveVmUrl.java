@@ -57,7 +57,7 @@ public final class ResolveVmUrl {
             vm = Selector.selectDefaultSigningVM(doc, purpose);
         }
         // Go rejects only on `revoked`; a hard reason without `revoked` is a verify-time concern.
-        if (vm.getRevoked() != null && !vm.getRevoked().isEmpty()) {
+        if (vm.getRevoked() != null) { // "" is malformed, not "not revoked" (Go fails the whole doc)
             throw new Exception("verification method '" + vm.getId() + "' was revoked at "
                     + rfc3339UTC(vm.getRevoked()));
         }

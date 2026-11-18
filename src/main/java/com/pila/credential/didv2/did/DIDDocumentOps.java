@@ -152,6 +152,13 @@ public final class DIDDocumentOps {
             throw new Exception("verification method not found: " + kid);
         }
         if (vm.getRevoked() != null && !vm.getRevoked().isEmpty()) {
+            // A soft-revoked (e.g. superseded) key may still be escalated to keyCompromise; the first
+            // revoked time is kept so backdated proofs stop verifying (Go #184).
+            if (RevocationReasons.isHardRevocationReason(reason)
+                    && !RevocationReasons.isHardRevocationReason(vm.getRevocationReason())) {
+                vm.setRevocationReason(reason);
+                return;
+            }
             throw new Exception("verification method \"" + vm.getId() + "\" is already revoked at "
                     + vm.getRevoked() + " (reason: " + vm.getRevocationReason() + ")");
         }

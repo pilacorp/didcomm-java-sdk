@@ -22,9 +22,12 @@ public final class Rfc3339 {
     }
 
     /** Strict parse (upper-case T/Z, numeric offsets allowed), like Go {@code time.Parse(time.RFC3339, s)}. */
+    private static final java.util.regex.Pattern STRICT = java.util.regex.Pattern.compile(
+            "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})");
+
     public static Instant parse(String s) throws DateTimeParseException {
-        if (s.indexOf('t') >= 0 || s.indexOf('z') >= 0) {
-            throw new DateTimeParseException("RFC 3339 requires upper-case T and Z", s, 0);
+        if (!STRICT.matcher(s).matches()) {
+            throw new DateTimeParseException("not RFC 3339 (upper-case T/Z, seconds, HH:MM offset)", s, 0);
         }
         return OffsetDateTime.parse(s, DateTimeFormatter.ISO_OFFSET_DATE_TIME).toInstant();
     }

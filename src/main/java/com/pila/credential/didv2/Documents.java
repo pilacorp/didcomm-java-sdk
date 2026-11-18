@@ -174,11 +174,33 @@ public final class Documents {
         checkRefs("assertionMethod", doc.getAssertionMethod(), doc.getId(), seen);
     }
 
+    /** Go's json.Marshal writes an unpaired surrogate as U+FFFD; Java's UTF-8 encoder would write '?'. */
+    static String replaceLoneSurrogates(String s) {
+        StringBuilder b = null;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            boolean lone = false;
+            if (Character.isHighSurrogate(c)) {
+                if (i + 1 < s.length() && Character.isLowSurrogate(s.charAt(i + 1))) {
+                    if (b != null) b.append(c).append(s.charAt(i + 1));
+                    i++;
+                    continue;
+                }
+                lone = true;
+            } else if (Character.isLowSurrogate(c)) {
+                lone = true;
+            }
+            if (lone && b == null) b = new StringBuilder(s.length()).append(s, 0, i);
+            if (b != null) b.append(lone ? '\uFFFD' : c);
+        }
+        return b == null ? s : b.toString();
+    }
+
     public static String hashDIDDocument(DIDDocument doc) throws Exception {
         if (doc == null) {
             throw new Exception("DID document is nil");
         }
-        byte[] marshaled = marshalGoJSON(doc).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] marshaled = replaceLoneSurrogates(marshalGoJSON(doc)).getBytes(java.nio.charset.StandardCharsets.UTF_8);
         byte[] canonical = Rfc8785.transform(marshaled);
         return Keccak256.hashHex(canonical);
     }

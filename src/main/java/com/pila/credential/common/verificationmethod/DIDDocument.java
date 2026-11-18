@@ -12,6 +12,7 @@ import java.util.Map;
  */
 @Getter
 @Setter
+@com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
 public class DIDDocument {
     @JsonProperty("@context")
     private List<String> context;

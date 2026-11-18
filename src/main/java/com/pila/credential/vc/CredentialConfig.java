@@ -12,8 +12,8 @@ import com.pila.credential.common.verificationmethod.VerificationMethodResolver;
  */
 public class CredentialConfig {
     public static final String DEFAULT_BASE_URL = "https://api.ndadid.vn/api/v1/did";
-    private static String baseURL = DEFAULT_BASE_URL;
-    private static CredentialResolver documentResolver;
+    private static volatile String baseURL = DEFAULT_BASE_URL;
+    private static volatile CredentialResolver documentResolver;
 
     /**
      * Initializes the package with a base URL.

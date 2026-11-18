@@ -45,6 +45,7 @@ public final class RemoteContextLoader {
 
     private static final HttpClient DEFAULT_CLIENT = HttpClient.newBuilder()
             .followRedirects(HttpClient.Redirect.NEVER) // redirects are followed below, counted and address-checked per hop
+            .proxy(java.net.http.HttpClient.Builder.NO_PROXY) // a proxy would resolve the host itself, past the address check
             .connectTimeout(Duration.ofSeconds(5))
             .build();
 
@@ -241,7 +242,7 @@ public final class RemoteContextLoader {
     }).toList();
 
     /** Whether ip may be connected to. An IPv6 address that carries an IPv4 address is judged by it. */
-    static boolean isPublic(InetAddress ip) {
+    public static boolean isPublic(InetAddress ip) {
         byte[] b = ip.getAddress();
         if (b.length == 16) {
             if (zeros(b, 0, 10) && b[10] == (byte) 0xff && b[11] == (byte) 0xff) b = java.util.Arrays.copyOfRange(b, 12, 16); // ::ffff:a.b.c.d

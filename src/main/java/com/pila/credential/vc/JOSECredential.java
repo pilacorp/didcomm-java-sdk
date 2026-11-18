@@ -405,6 +405,7 @@ public class JOSECredential implements SignableCredential {
         copy.setSubject(vcc.getSubject());
         copy.setSchemas(vcc.getSchemas());
         copy.setCredentialStatus(vcc.getCredentialStatus());
+        copy.setTermsOfUse(vcc.getTermsOfUse());
         return copy;
     }
 

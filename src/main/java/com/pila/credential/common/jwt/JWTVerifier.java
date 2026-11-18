@@ -59,7 +59,7 @@ public class JWTVerifier {
      * @throws Exception if verification fails
      */
     public void verifyJWT(String tokenString) throws Exception {
-        String[] parts = tokenString.split("\\.");
+        String[] parts = tokenString.split("\\.", -1);
         if (parts.length != 3) {
             throw new Exception("invalid JWT format");
         }

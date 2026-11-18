@@ -19,7 +19,7 @@ public final class Rfc8785 {
     private static final byte[] ASCII_ESCAPES = {'\\', '"', 'b', 'f', 'n', 'r', 't'};
     private static final byte[] BINARY_ESCAPES = {'\\', '"', '\b', '\f', '\n', '\r', '\t'};
 
-    private static final int MAX_DEPTH = 200;
+    private static final int MAX_DEPTH = 1000;
 
     private final byte[] d;
     private int i;

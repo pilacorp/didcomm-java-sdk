@@ -22,7 +22,7 @@ import java.util.zip.GZIPInputStream;
 public final class CredentialStatus {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final int MAX_BITSTRING_BYTES = 16 << 20;
-    private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+    private static final HttpClient HTTP = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).connectTimeout(Duration.ofSeconds(10)).build();
 
     /** Fetches the raw status list credential response for a URL. */
     @FunctionalInterface

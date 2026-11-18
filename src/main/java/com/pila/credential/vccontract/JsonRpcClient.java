@@ -16,7 +16,7 @@ import java.util.Map;
 /** Default network implementation: eth_getTransactionReceipt and eth_call over java.net.http JSON-RPC. */
 public final class JsonRpcClient implements ReceiptSource, CallSource {
     private static final ObjectMapper JSON = new ObjectMapper();
-    private final HttpClient http = HttpClient.newHttpClient();
+    private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
     private final URI uri;
 
     public JsonRpcClient(String rpcUrl) {
@@ -55,7 +55,12 @@ public final class JsonRpcClient implements ReceiptSource, CallSource {
             throw new VcContractException.TxNotFound();
         }
         String status = r.path("status").asText("0x0");
-        long st = status.startsWith("0x") && status.length() > 2 ? Long.parseLong(status.substring(2), 16) : 0;
+        long st;
+        try {
+            st = status.startsWith("0x") && status.length() > 2 ? Long.parseLong(status.substring(2), 16) : 0;
+        } catch (NumberFormatException e) {
+            throw new IllegalStateException("invalid receipt status: " + status, e);
+        }
         List<Log> logs = new ArrayList<>();
         for (JsonNode l : r.path("logs")) {
             if (l.isNull()) {

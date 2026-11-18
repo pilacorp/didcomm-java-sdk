@@ -103,7 +103,7 @@ public final class Selector {
         long bestN = -1;
         if (doc.getVerificationMethod() != null) {
             for (VerificationMethodEntry vm : doc.getVerificationMethod()) {
-                if (vm.getRevoked() != null && !vm.getRevoked().isEmpty()) {
+                if (vm.getRevoked() != null) {
                     continue;
                 }
                 if (!idInPurposeArray(vm.getId(), doc.getId(), purposeArr)) {

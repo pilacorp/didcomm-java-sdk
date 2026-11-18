@@ -68,7 +68,7 @@ public final class VcAnchor {
         if (anchoredLeafCount <= 0) {
             throw new IllegalArgumentException("anchored leaf_count is required");
         }
-        if (receipt.leafCount != anchoredLeafCount || receipt.proof.size() != Merkle.proofLen(anchoredLeafCount)) {
+        if (receipt.proof == null || receipt.leafCount != anchoredLeafCount || receipt.proof.size() != Merkle.proofLen(anchoredLeafCount)) {
             return false;
         }
         List<byte[]> proof = new ArrayList<>();

@@ -444,7 +444,8 @@ public class JSONMap extends HashMap<String, Object> {
                 if (!proofVerificationMethod.equals(proof.getVerificationMethod())) {
                     continue;
                 }
-                matched = true;
+                // Go verifies only the proof bound to the chosen VM (the first one) and ignores the rest.
+                return verifyOneProof(resolver, proof);
             }
             if (!verifyOneProof(resolver, proof)) {
                 return false;
@@ -467,9 +468,9 @@ public class JSONMap extends HashMap<String, Object> {
             return verifyEcdsaSecp256k1Proof(resolver, proof);
         }
         if (DATA_INTEGRITY_PROOF.equals(proof.getType()) && ECDSA_RDFC_2019.equals(proof.getCryptosuite())) {
-            VerificationMethodEntry vmEntry = resolver.findVerificationMethod(proof.getVerificationMethod());
             String didPart = didFromVerificationMethod(proof.getVerificationMethod());
             DIDDocument doc = resolver.resolveDocument(didPart);
+            VerificationMethodEntry vmEntry = VerificationMethodMaterial.findVerificationMethod(doc, proof.getVerificationMethod());
             PublicKey publicKey = resolver.ecPublicKeyFromEntry(vmEntry);
             if (!verifyECDSA(publicKey, proof)) {
                 return false;
@@ -491,7 +492,7 @@ public class JSONMap extends HashMap<String, Object> {
         String vmUrl = jwtVerificationMethodUrl(proof);
         String didPart = didFromVerificationMethod(vmUrl);
         DIDDocument doc = resolver.resolveDocument(didPart);
-        VerificationMethodEntry vm = resolver.findVerificationMethod(vmUrl);
+        VerificationMethodEntry vm = VerificationMethodMaterial.findVerificationMethod(doc, vmUrl);
         PublicKey publicKey = resolver.ecPublicKeyFromEntry(vm);
         Map<String, Object> req = new HashMap<>();
         req.put("proof", proof.getRaw() != null ? proof.getRaw() : Map.of());
@@ -530,7 +531,7 @@ public class JSONMap extends HashMap<String, Object> {
     private boolean verifyJwsProof(CredentialResolver resolver, Proof proof) throws Exception {
         String didPart = didFromVerificationMethod(proof.getVerificationMethod());
         DIDDocument doc = resolver.resolveDocument(didPart);
-        VerificationMethodEntry vm = resolver.findVerificationMethod(proof.getVerificationMethod());
+        VerificationMethodEntry vm = VerificationMethodMaterial.findVerificationMethod(doc, proof.getVerificationMethod());
         if (!JSON_WEB_KEY_2020.equals(vm.getType())) {
             throw new Exception("expected " + JSON_WEB_KEY_2020 + " VM, got " + vm.getType());
         }
@@ -570,9 +571,9 @@ public class JSONMap extends HashMap<String, Object> {
     }
 
     private boolean verifyEcdsaSdProof(CredentialResolver resolver, Proof proof) throws Exception {
-        VerificationMethodEntry vmEntry = resolver.findVerificationMethod(proof.getVerificationMethod());
         String didPart = didFromVerificationMethod(proof.getVerificationMethod());
         DIDDocument doc = resolver.resolveDocument(didPart);
+        VerificationMethodEntry vmEntry = VerificationMethodMaterial.findVerificationMethod(doc, proof.getVerificationMethod());
         PublicKey publicKey = resolver.ecPublicKeyFromEntry(vmEntry);
         Map<String, Object> docNoProof = bodyWithoutProof();
         EcdsaSd.verifyProof(docNoProof, ecdsaSdProofConfig(proof), proof.getProofValue(), publicKey);
@@ -696,12 +697,12 @@ public class JSONMap extends HashMap<String, Object> {
         if (!ALG_ES256K.equals(alg)) {
             throw new Exception(ECDSA_SECP256K1_SIGNATURE_2019 + ": jws alg must be " + ALG_ES256K + ", got " + alg);
         }
-        VerificationMethodEntry vmEntry = resolver.findVerificationMethod(proof.getVerificationMethod());
+        String didPart = didFromVerificationMethod(proof.getVerificationMethod());
+        DIDDocument doc = resolver.resolveDocument(didPart);
+        VerificationMethodEntry vmEntry = VerificationMethodMaterial.findVerificationMethod(doc, proof.getVerificationMethod());
         if (VerificationMethodKeyKind.fromEntry(vmEntry) != VerificationMethodKeyKind.SECP256K1) {
             throw new Exception(ECDSA_SECP256K1_SIGNATURE_2019 + ": verification method does not hold a secp256k1 key");
         }
-        String didPart = didFromVerificationMethod(proof.getVerificationMethod());
-        DIDDocument doc = resolver.resolveDocument(didPart);
         PublicKey publicKey = resolver.ecPublicKeyFromEntry(vmEntry);
         byte[] hashData = ecdsaHashData(proof);
         byte[] signingInput = JwsDetached.signingInput(parts[0], hashData);
@@ -818,7 +819,12 @@ public class JSONMap extends HashMap<String, Object> {
         }
         Map<String, Object> cfg = new LinkedHashMap<>();
         if (proof.getRaw() != null) {
-            cfg.putAll(proof.getRaw());
+            // Go's dto.Proof.ToMap() is omitempty: drop empty-string members.
+            proof.getRaw().forEach((k, v) -> {
+                if (!(v instanceof String s && s.isEmpty())) {
+                    cfg.put(k, v);
+                }
+            });
         } else {
             putIfSet(cfg, "type", proof.getType());
             putIfSet(cfg, "created", proof.getCreated());

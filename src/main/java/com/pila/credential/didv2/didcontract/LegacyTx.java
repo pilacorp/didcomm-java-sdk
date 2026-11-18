@@ -22,16 +22,16 @@ public final class LegacyTx {
             Signer signer) throws Exception {
         byte[] toBytes = Hex.decode(to);
         List<byte[]> unsigned = new ArrayList<>();
-        unsigned.add(raw(Rlp.encodeUint(BigInteger.valueOf(nonce))));
-        unsigned.add(raw(Rlp.encodeUint(gasPrice == null ? BigInteger.ZERO : gasPrice)));
-        unsigned.add(raw(Rlp.encodeUint(BigInteger.valueOf(gasLimit))));
-        unsigned.add(raw(Rlp.encodeItem(toBytes)));
-        unsigned.add(raw(Rlp.encodeUint(BigInteger.ZERO)));
-        unsigned.add(raw(Rlp.encodeItem(data)));
-        unsigned.add(raw(Rlp.encodeUint(BigInteger.valueOf(chainId))));
-        unsigned.add(raw(Rlp.encodeUint(BigInteger.ZERO)));
-        unsigned.add(raw(Rlp.encodeUint(BigInteger.ZERO)));
-        byte[] unsignedRlp = Rlp.encodeList(toPayloads(unsigned));
+        unsigned.add(Rlp.encodeUint(BigInteger.valueOf(nonce)));
+        unsigned.add(Rlp.encodeUint(gasPrice == null ? BigInteger.ZERO : gasPrice));
+        unsigned.add(Rlp.encodeUint(BigInteger.valueOf(gasLimit)));
+        unsigned.add(Rlp.encodeItem(toBytes));
+        unsigned.add(Rlp.encodeUint(BigInteger.ZERO));
+        unsigned.add(Rlp.encodeItem(data));
+        unsigned.add(Rlp.encodeUint(BigInteger.valueOf(chainId)));
+        unsigned.add(Rlp.encodeUint(BigInteger.ZERO));
+        unsigned.add(Rlp.encodeUint(BigInteger.ZERO));
+        byte[] unsignedRlp = Rlp.encodeList(unsigned);
         byte[] hash = Keccak256.hash(unsignedRlp);
         byte[] sig = signer.sign(hash);
         // go-ethereum WithSignature wants exactly 65 bytes and uses the signer's v as is (v = sig[64] + 35 + 2*chainId,
@@ -44,33 +44,19 @@ public final class LegacyTx {
         BigInteger s = new BigInteger(1, Arrays.copyOfRange(sig, 32, 64));
         BigInteger v = BigInteger.valueOf(recId + 2L * chainId);
         List<byte[]> signed = new ArrayList<>();
-        signed.add(raw(Rlp.encodeUint(BigInteger.valueOf(nonce))));
-        signed.add(raw(Rlp.encodeUint(gasPrice == null ? BigInteger.ZERO : gasPrice)));
-        signed.add(raw(Rlp.encodeUint(BigInteger.valueOf(gasLimit))));
-        signed.add(raw(Rlp.encodeItem(toBytes)));
-        signed.add(raw(Rlp.encodeUint(BigInteger.ZERO)));
-        signed.add(raw(Rlp.encodeItem(data)));
-        signed.add(raw(Rlp.encodeUint(v)));
-        signed.add(raw(Rlp.encodeUint(r)));
-        signed.add(raw(Rlp.encodeUint(s)));
-        byte[] signedRlp = Rlp.encodeList(toPayloads(signed));
+        signed.add(Rlp.encodeUint(BigInteger.valueOf(nonce)));
+        signed.add(Rlp.encodeUint(gasPrice == null ? BigInteger.ZERO : gasPrice));
+        signed.add(Rlp.encodeUint(BigInteger.valueOf(gasLimit)));
+        signed.add(Rlp.encodeItem(toBytes));
+        signed.add(Rlp.encodeUint(BigInteger.ZERO));
+        signed.add(Rlp.encodeItem(data));
+        signed.add(Rlp.encodeUint(v));
+        signed.add(Rlp.encodeUint(r));
+        signed.add(Rlp.encodeUint(s));
+        byte[] signedRlp = Rlp.encodeList(signed);
         Signed out = new Signed();
         out.txHex = Hex.encode(signedRlp);
         out.txHash = Hex.encode0x(Keccak256.hash(signedRlp));
         return out;
-    }
-
-    private static byte[] raw(byte[] encodedItem) {
-        return encodedItem;
-    }
-
-    /**
-     * encodeList expects already-encoded items as payloads... wait, I designed encodeList to
-     * re-encode items. Fix: pass already-encoded RLP items by concatenating.
-     */
-    private static List<byte[]> toPayloads(List<byte[]> encodedItems) {
-        // Rlp.encodeList currently calls encodeItem on each. We need a list of raw inner bytes.
-        // Use a dedicated concatenate for already-encoded items.
-        return encodedItems;
     }
 }

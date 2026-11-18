@@ -60,7 +60,7 @@ public final class StatusList {
 
     public void set(int i, int v) throws Exception {
         int[] p = position(i);
-        if (v > mask()) {
+        if (v < 0 || v > mask()) {
             throw new Exception("statuslist: value " + v + " does not fit in " + bits + " bits");
         }
         b[p[0]] = (byte) ((b[p[0]] & ~(mask() << p[1])) | (v << p[1]));

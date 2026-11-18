@@ -29,7 +29,12 @@ public final class VerificationMethodMaterial {
     public static VerificationMethodEntry findVerificationMethod(CredentialResolver resolver,
             String verificationMethodURL) throws Exception {
         String didPart = didFromVerificationMethodURL(verificationMethodURL);
-        DIDDocument doc = resolver.resolveDocument(didPart);
+        return findVerificationMethod(resolver.resolveDocument(didPart), verificationMethodURL);
+    }
+
+    /** Looks the method up in an already-resolved document, so a proof costs one resolution. */
+    public static VerificationMethodEntry findVerificationMethod(DIDDocument doc, String verificationMethodURL)
+            throws Exception {
         if (doc.getVerificationMethod() != null) {
             for (VerificationMethodEntry vm : doc.getVerificationMethod()) {
                 if (verificationMethodURL.equals(vm.getId())) {
