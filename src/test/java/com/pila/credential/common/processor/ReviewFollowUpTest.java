@@ -31,7 +31,7 @@ class ReviewFollowUpTest {
         assertFalse(JsonSchemaValidator.validate(fmt, "nope").isEmpty());
         assertTrue(JsonSchemaValidator.validate(fmt, "2024-01-01T00:00:00Z").isEmpty());
         byte[] evil = "{\"type\":\"string\",\"pattern\":\"(.*a){25}x\"}".getBytes(StandardCharsets.UTF_8);
-        assertThrows(Exception.class, () -> JsonSchemaValidator.validate(evil, "a".repeat(40)));
+        assertFalse(JsonSchemaValidator.validate(evil, "a".repeat(40)).isEmpty()); // no match, and no stall
     }
 
     /** Expected N-Quads are the output of go-credential-sdk's processor.Canonicalize (6cd59d4) for this input. */
@@ -73,23 +73,30 @@ class ReviewFollowUpTest {
     }
 
     @Test
-    void schemaRegexBudgetIsPerValidationAndStackSafe() throws Exception {
-        StringBuilder props = new StringBuilder();
-        StringBuilder inst = new StringBuilder();
-        for (int i = 0; i < 30; i++) {
-            props.append(i > 0 ? "," : "").append("\"p").append(i).append("\":{\"pattern\":\"(.*a){8}x\"}");
-            inst.append(i > 0 ? "," : "").append("\"p").append(i).append("\":\"").append("a".repeat(27)).append('"');
-        }
-        byte[] schema = ("{\"properties\":{" + props + "}}").getBytes(StandardCharsets.UTF_8);
-        Map<String, Object> value = new com.fasterxml.jackson.databind.ObjectMapper().readValue(
-                "{" + inst + "}", new com.fasterxml.jackson.core.type.TypeReference<>() {
-                });
+    void schemaPatternsAreLinearTimeAndStackSafe() throws Exception {
+        // RE2 matching: these took seconds / overflowed the stack with java.util.regex
+        byte[] slow = "{\"type\":\"string\",\"pattern\":\"(.*a){12}x\"}".getBytes(StandardCharsets.UTF_8);
         long t0 = System.nanoTime();
-        assertThrows(Exception.class, () -> JsonSchemaValidator.validate(schema, value));
-        assertTrue((System.nanoTime() - t0) / 1e9 < 6, "bounded as a whole");
-
+        assertEquals(1, JsonSchemaValidator.validate(slow, "a".repeat(40)).size());
         byte[] deep = "{\"type\":\"string\",\"pattern\":\"^(a|b)*$\"}".getBytes(StandardCharsets.UTF_8);
-        // a StackOverflowError would fail this assertThrows (it is an Error, not an Exception)
-        assertThrows(Exception.class, () -> JsonSchemaValidator.validate(deep, "ab".repeat(20_000)));
+        assertTrue(JsonSchemaValidator.validate(deep, "ab".repeat(20_000)).isEmpty());
+        assertTrue((System.nanoTime() - t0) / 1e9 < 2);
+    }
+
+    /** Hashes are Go's DIDDocument.Hash() for the same metadata (json.Unmarshal merges the U+FFFD keys). */
+    @Test
+    void didDocumentHashMergesLoneSurrogateKeys() throws Exception {
+        com.fasterxml.jackson.databind.ObjectMapper om = new com.fasterxml.jackson.databind.ObjectMapper();
+        var type = new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {
+        };
+        com.pila.credential.common.verificationmethod.DIDDocument doc =
+                new com.pila.credential.common.verificationmethod.DIDDocument();
+        doc.setId("did:example:a");
+        doc.setDidDocumentMetadata(om.readValue("{\"\\ud800\":1,\"\\udbff\":2}", type));
+        assertEquals("0xeed5f92bc85b0724125edc3b9efdfeffcb97130955bdf0ff9c90d439ba081cfa",
+                com.pila.credential.didv2.Documents.hashDIDDocument(doc));
+        doc.setDidDocumentMetadata(om.readValue("{\"\\ud800\":2,\"\\udbff\":1}", type));
+        assertEquals("0xc425b54b2782f796e8177bd85f1ba01cba143409526c5a460b1424fd19bbf7c0",
+                com.pila.credential.didv2.Documents.hashDIDDocument(doc));
     }
 }

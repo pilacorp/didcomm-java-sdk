@@ -233,7 +233,7 @@ final class FormatChecks {
     private static boolean regex(String s) {
         if (s.isEmpty()) return true;
         try {
-            Pattern.compile(s);
+            com.google.re2j.Pattern.compile(s); // Go: regexp.Compile (RE2)
             return true;
         } catch (RuntimeException e) {
             return false;

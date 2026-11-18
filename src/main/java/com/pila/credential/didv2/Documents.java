@@ -323,10 +323,13 @@ public final class Documents {
         Map<String, Object> out = new TreeMap<>();
         for (Map.Entry<String, Object> e : input.entrySet()) {
             Object v = e.getValue();
+            // Go decodes JSON into a map with invalid UTF-16 keys already replaced by U+FFFD, so keys that
+            // differ only by lone surrogates collapse there, the last one in document order winning.
+            String key = replaceLoneSurrogates(e.getKey());
             if (v instanceof Map<?, ?> m) {
-                out.put(e.getKey(), sortObject((Map<String, Object>) m));
+                out.put(key, sortObject((Map<String, Object>) m));
             } else {
-                out.put(e.getKey(), v);
+                out.put(key, v);
             }
         }
         return out;

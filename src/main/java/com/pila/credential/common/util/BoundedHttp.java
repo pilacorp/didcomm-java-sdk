@@ -62,6 +62,38 @@ public final class BoundedHttp {
     public record Response(int status, HttpHeaders headers, byte[] body) {
     }
 
+    /** An open response: status, headers and a body stream; closing it releases the connection. */
+    public record Reply(int status, HttpHeaders headers, InputStream body) implements java.io.Closeable {
+        @Override
+        public void close() throws IOException {
+            body.close();
+        }
+    }
+
+    /** Sends one GET and returns when the headers are in; the deadline is a System.nanoTime() value. */
+    @FunctionalInterface
+    public interface Opener {
+        Reply open(URI uri, Map<String, String> headers, long deadlineNanos) throws IOException, InterruptedException;
+    }
+
+    /** The JDK client as an Opener (it resolves the host itself on connect). */
+    public static Opener jdk(HttpClient client) {
+        return (uri, headers, deadline) -> {
+            long left = deadline - System.nanoTime();
+            if (left <= 0) {
+                throw new Failure(Kind.TIMEOUT, "request timed out");
+            }
+            HttpRequest.Builder b = HttpRequest.newBuilder(uri).timeout(Duration.ofNanos(left)).GET();
+            headers.forEach(b::header);
+            try {
+                HttpResponse<InputStream> res = client.send(b.build(), HttpResponse.BodyHandlers.ofInputStream());
+                return new Reply(res.statusCode(), res.headers(), res.body());
+            } catch (java.net.http.HttpTimeoutException e) {
+                throw new Failure(Kind.TIMEOUT, "request timed out");
+            }
+        };
+    }
+
     private static final Set<Integer> REDIRECTS = Set.of(301, 302, 303, 307, 308);
     private static final ScheduledExecutorService WATCHDOG = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "bounded-http-watchdog");
@@ -78,25 +110,18 @@ public final class BoundedHttp {
      */
     public static Response get(HttpClient client, URI uri, Map<String, String> headers, Duration total,
             int maxRedirects, int maxBytes, UriGuard guard) throws IOException, InterruptedException {
+        return get(jdk(client), uri, headers, total, maxRedirects, maxBytes, guard);
+    }
+
+    public static Response get(Opener opener, URI uri, Map<String, String> headers, Duration total,
+            int maxRedirects, int maxBytes, UriGuard guard) throws IOException, InterruptedException {
         long deadline = System.nanoTime() + total.toNanos();
         for (int hops = 0; ; hops++) {
             if (guard != null) {
                 guard.check(uri);
             }
-            long left = deadline - System.nanoTime();
-            if (left <= 0) {
-                throw new Failure(Kind.TIMEOUT, "request timed out");
-            }
-            HttpRequest.Builder b = HttpRequest.newBuilder(uri).timeout(Duration.ofNanos(left)).GET();
-            headers.forEach(b::header);
-            HttpResponse<InputStream> res;
-            try {
-                res = client.send(b.build(), HttpResponse.BodyHandlers.ofInputStream());
-            } catch (java.net.http.HttpTimeoutException e) {
-                throw new Failure(Kind.TIMEOUT, "request timed out");
-            }
-            try (InputStream in = res.body()) {
-                int status = res.statusCode();
+            try (Reply res = opener.open(uri, headers, deadline)) {
+                int status = res.status();
                 var location = res.headers().firstValue("location");
                 if (REDIRECTS.contains(status) && location.isPresent()) {
                     if (hops >= maxRedirects) {
@@ -105,7 +130,7 @@ public final class BoundedHttp {
                     uri = uri.resolve(location.get());
                     continue;
                 }
-                byte[] body = status / 100 == 2 ? readBounded(in, deadline, maxBytes) : new byte[0];
+                byte[] body = status / 100 == 2 ? readBounded(res.body(), deadline, maxBytes) : new byte[0];
                 return new Response(status, res.headers(), body);
             }
         }

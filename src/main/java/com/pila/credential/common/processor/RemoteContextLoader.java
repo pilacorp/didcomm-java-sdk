@@ -8,6 +8,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.URI;
+import com.pila.credential.common.util.BoundedHttp;
+import com.pila.credential.common.util.PinnedHttp;
 import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpHeaders;
@@ -17,6 +19,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -119,20 +122,35 @@ public final class RemoteContextLoader {
             if (requests > MAX_CONTEXT_REQUESTS) {
                 throw new JsonLdLimitException(Kind.REQUESTS, "context fetch made too many requests");
             }
-            if (checkAddress) refuseNonPublic(uri);
             long left = deadline - System.nanoTime();
             if (left <= 0) throw new TimeoutException("context fetch timed out");
-            HttpRequest req = HttpRequest.newBuilder(uri)
-                    .timeout(Duration.ofNanos(left))
-                    .header("Accept", "application/ld+json, application/json;q=0.9")
-                    .GET().build();
-            HttpResponse<InputStream> res = client.send(req, HttpResponse.BodyHandlers.ofInputStream());
+            Map<String, String> reqHeaders = Map.of("Accept", "application/ld+json, application/json;q=0.9");
+            BoundedHttp.Reply res;
+            if (checkAddress) {
+                // connects to the address it checked itself: no DNS-rebinding window, no proxy
+                try {
+                    res = PinnedHttp.open(uri, reqHeaders, deadline);
+                } catch (BoundedHttp.Failure f) {
+                    if (f.kind() == BoundedHttp.Kind.ADDRESS_BLOCKED) {
+                        throw new JsonLdLimitException(Kind.ADDRESS, "context address is not public");
+                    }
+                    if (f.kind() == BoundedHttp.Kind.TIMEOUT) throw new TimeoutException("context fetch timed out");
+                    throw f;
+                }
+            } else {
+                try {
+                    res = BoundedHttp.jdk(client).open(uri, reqHeaders, deadline);
+                } catch (BoundedHttp.Failure f) {
+                    if (f.kind() == BoundedHttp.Kind.TIMEOUT) throw new TimeoutException("context fetch timed out");
+                    throw f;
+                }
+            }
             try (InputStream in = res.body()) {
                 // json-gold-style loaders load an alternate themselves, so every one is scheme-checked.
                 List<URI> alternates = new ArrayList<>();
                 for (String target : alternateTargets(res.headers())) alternates.add(httpTarget(uri, target));
 
-                int status = res.statusCode();
+                int status = res.status();
                 if (status >= 300 && status < 400) {
                     String loc = res.headers().firstValue("location").orElseThrow(() -> new IOException("redirect without Location"));
                     uri = httpTarget(uri, loc);
@@ -260,14 +278,10 @@ public final class RemoteContextLoader {
     }
 
     /**
-     * Resolves the host and refuses if any address is non-public. ponytail: {@code java.net.http.HttpClient}
-     * cannot be pinned to the checked address (no socket factory or custom DNS hook), so the client resolves
-     * again on connect. Both lookups normally hit the JVM's positive DNS cache, which leaves only the moment
-     * an entry expires between the two; with {@code networkaddress.cache.ttl=0} the window is always open.
-     * Go checks the dialed address in {@code Dialer.Control}. Deployments that load contexts from untrusted
-     * documents should keep the default cache (30 s) or higher, or serve contexts from a trusted mirror.
-     * Closing it fully needs an HTTP client that accepts a custom resolver (e.g. OkHttp's {@code Dns}).
-     * {@code didresolver.HttpTransport} uses the same check and has the same limit.
+     * Resolves the host and refuses if any address is non-public. This is the early check; the request itself
+     * goes through {@link PinnedHttp}, which resolves once more and dials that very address, so a DNS answer
+     * that changes in between (rebinding) cannot redirect the connection, as with Go's
+     * {@code Dialer.Control}. A client supplied with {@code setHttpClient} is trusted as is.
      */
     static void refuseNonPublic(URI uri) throws Exception {
         String host = uri.getHost();

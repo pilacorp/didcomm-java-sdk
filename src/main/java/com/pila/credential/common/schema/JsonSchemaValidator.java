@@ -7,7 +7,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.regex.Pattern;
+import com.google.re2j.Pattern;
 
 /**
  * JSON Schema draft-07 core validator (no JSON-schema library is available offline, and Go uses
@@ -16,15 +16,11 @@ import java.util.regex.Pattern;
  * multipleOf, min/maxProperties, allOf/anyOf/oneOf/not, if/then/else and local {@code $ref}
  * ({@code #}, {@code #/definitions/...}). Not supported and refused rather than ignored: remote {@code $ref}.
  * {@code format} follows gojsonschema's 17 checkers ({@link FormatChecks}), on strings and numbers. Regexes
- * run under one time budget per validation (Go uses linear-time RE2).
+ * use RE2/J, the same linear-time RE2 syntax Go uses.
  */
 public final class JsonSchemaValidator {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    /** One budget for a whole validation: both the schema and the value come from the credential. */
-    private static final long VALIDATION_BUDGET_NANOS = 2_000_000_000L;
-
-    private final long deadline = System.nanoTime() + VALIDATION_BUDGET_NANOS;
     private final JsonNode root;
     private final List<String> errors = new ArrayList<>();
 
@@ -41,25 +37,12 @@ public final class JsonSchemaValidator {
         return v.errors;
     }
 
-    /** Unanchored regex match that gives up (as an error) instead of backtracking forever on a hostile pattern. */
-    private boolean find(String regex, String s) throws Exception {
-        CharSequence guarded = new CharSequence() {
-            public int length() { return s.length(); }
-            public char charAt(int i) {
-                if (System.nanoTime() > deadline) throw new IllegalStateException("regex time budget exceeded");
-                return s.charAt(i);
-            }
-            public CharSequence subSequence(int a, int b) { return s.subSequence(a, b); }
-            public String toString() { return s; }
-        };
-        try {
-            return Pattern.compile(regex).matcher(guarded).find();
-        } catch (IllegalStateException e) {
-            throw new Exception("schema validation exceeded its time budget");
-        } catch (StackOverflowError e) {
-            // java.util.regex recurses on alternation; a long value must not escape verify() as an Error.
-            throw new Exception("schema pattern \"" + regex + "\" is too deep to match this value");
-        }
+    /**
+     * Unanchored match with RE2 syntax and linear-time matching, like Go's regexp: neither a hostile pattern
+     * nor a long value can stall the validation or overflow the stack.
+     */
+    private static boolean find(String regex, String s) {
+        return Pattern.compile(regex).matcher(s).find();
     }
 
     private boolean check(JsonNode schema, JsonNode inst, String path, int depth) throws Exception {
