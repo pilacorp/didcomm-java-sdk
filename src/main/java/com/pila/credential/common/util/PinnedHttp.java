@@ -39,11 +39,7 @@ import java.util.concurrent.TimeUnit;
  */
 public final class PinnedHttp {
     private static final int MAX_HEAD_BYTES = 64 * 1024;
-    private static final ScheduledExecutorService WATCHDOG = Executors.newSingleThreadScheduledExecutor(r -> {
-        Thread t = new Thread(r, "pinned-http-watchdog");
-        t.setDaemon(true);
-        return t;
-    });
+    private static final ScheduledExecutorService WATCHDOG = BoundedHttp.watchdog("pinned-http-watchdog");
 
     private PinnedHttp() {
     }
@@ -63,7 +59,7 @@ public final class PinnedHttp {
         String host = uri.getHost();
         if (host.startsWith("[") && host.endsWith("]")) host = host.substring(1, host.length() - 1);
         int port = uri.getPort() >= 0 ? uri.getPort() : tls ? 443 : 80;
-        InetAddress[] addrs = InetAddress.getAllByName(host);
+        InetAddress[] addrs = resolve(host, deadline);
         for (InetAddress a : addrs) {
             if (!allowed.test(a)) throw new Failure(Kind.ADDRESS_BLOCKED, "address is not globally reachable");
         }
@@ -80,28 +76,33 @@ public final class PinnedHttp {
                 ss.startHandshake();
                 io = ss;
             }
-            String path = (uri.getRawPath() == null || uri.getRawPath().isEmpty() ? "/" : uri.getRawPath())
-                    + (uri.getRawQuery() == null ? "" : "?" + uri.getRawQuery());
+            URI ascii = URI.create(uri.toASCIIString()); // non-ASCII path/query goes out as %XX (UTF-8), like Go
+            String path = (ascii.getRawPath() == null || ascii.getRawPath().isEmpty() ? "/" : ascii.getRawPath())
+                    + (ascii.getRawQuery() == null ? "" : "?" + ascii.getRawQuery());
             StringBuilder req = new StringBuilder("GET ").append(path).append(" HTTP/1.1\r\nHost: ").append(uri.getHost())
                     .append(uri.getPort() >= 0 ? ":" + uri.getPort() : "").append("\r\nConnection: close\r\n");
             headers.forEach((k, v) -> req.append(k).append(": ").append(v.replaceAll("[\\r\\n]", " ")).append("\r\n"));
             io.getOutputStream().write(req.append("\r\n").toString().getBytes(StandardCharsets.US_ASCII));
             io.getOutputStream().flush();
             InputStream in = new java.io.BufferedInputStream(io.getInputStream());
-            String statusLine = readLine(in, new int[] {0});
-            String[] sl = statusLine.split(" ", 3);
-            if (sl.length < 2 || !sl[0].startsWith("HTTP/1.") || !sl[1].matches("\\d{3}")) {
-                throw new IOException("malformed response");
-            }
-            int status = Integer.parseInt(sl[1]);
-            Map<String, List<String>> h = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-            int[] budget = {statusLine.length() + 2};
-            for (String line; !(line = readLine(in, budget)).isEmpty(); ) {
-                int c = line.indexOf(':');
-                if (c <= 0) throw new IOException("malformed response header");
-                h.computeIfAbsent(line.substring(0, c).trim().toLowerCase(Locale.ROOT), k -> new ArrayList<>())
-                        .add(line.substring(c + 1).trim());
-            }
+            int[] budget = {0};
+            int status;
+            Map<String, List<String>> h;
+            do { // an interim 1xx (100 Continue, 103 Early Hints) is skipped; the final head follows
+                String statusLine = readLine(in, budget);
+                String[] sl = statusLine.split(" ", 3);
+                if (sl.length < 2 || !sl[0].startsWith("HTTP/1.") || !sl[1].matches("\\d{3}")) {
+                    throw new IOException("malformed response");
+                }
+                status = Integer.parseInt(sl[1]);
+                h = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+                for (String line; !(line = readLine(in, budget)).isEmpty(); ) {
+                    int c = line.indexOf(':');
+                    if (c <= 0) throw new IOException("malformed response header");
+                    h.computeIfAbsent(line.substring(0, c).trim().toLowerCase(Locale.ROOT), k -> new ArrayList<>())
+                            .add(line.substring(c + 1).trim());
+                }
+            } while (status / 100 == 1 && status != 101);
             HttpHeaders hh = HttpHeaders.of(h, (k, v) -> true);
             InputStream body = body(in, status, hh);
             return new Reply(status, hh, new FilterInputStream(body) {
@@ -119,6 +120,28 @@ public final class PinnedHttp {
         }
     }
 
+    /** DNS under the same deadline (Go's DialContext bounds it too). */
+    private static InetAddress[] resolve(String host, long deadline) throws IOException {
+        java.util.concurrent.CompletableFuture<InetAddress[]> f = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+            try {
+                return InetAddress.getAllByName(host);
+            } catch (IOException e) {
+                throw new java.util.concurrent.CompletionException(e);
+            }
+        });
+        try {
+            return f.get(Math.max(1, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
+        } catch (java.util.concurrent.TimeoutException e) {
+            f.cancel(true);
+            throw new Failure(Kind.TIMEOUT, "request timed out");
+        } catch (java.util.concurrent.ExecutionException e) {
+            throw e.getCause() instanceof IOException io ? io : new IOException(e.getCause());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("interrupted", e);
+        }
+    }
+
     private static Socket connect(InetAddress[] addrs, int port, long deadline) throws IOException {
         IOException last = null;
         for (InetAddress a : addrs) {
@@ -128,6 +151,9 @@ public final class PinnedHttp {
             try {
                 s.connect(new InetSocketAddress(a, port), (int) Math.min(leftMs, Integer.MAX_VALUE));
                 return s;
+            } catch (java.net.SocketTimeoutException e) {
+                closeQuietly(s);
+                throw new Failure(Kind.TIMEOUT, "request timed out");
             } catch (IOException e) {
                 closeQuietly(s);
                 last = e;
@@ -153,7 +179,7 @@ public final class PinnedHttp {
             if (++budget[0] > MAX_HEAD_BYTES) throw new IOException("response head too large");
             b.write(c);
         }
-        String s = b.toString(StandardCharsets.ISO_8859_1);
+        String s = b.toString(StandardCharsets.UTF_8); // a raw UTF-8 Location must survive
         return s.endsWith("\r") ? s.substring(0, s.length() - 1) : s;
     }
 

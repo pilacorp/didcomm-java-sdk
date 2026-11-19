@@ -6,9 +6,8 @@ import com.pila.credential.common.util.Rfc3339;
 
 /**
  * The {@code format} checkers of gojsonschema v1.2.0 ({@code format_checkers.go}): 17 formats, strings and
- * numbers only, unknown formats pass. Go's parsers ({@code net/mail}, {@code net/url}, {@code net.ParseIP},
- * {@code time.Parse}) are reproduced by hand for the accepted shapes; see FormatChecksTest for the table
- * measured against Go.
+ * numbers only, unknown formats pass. {@link GoMail} and {@link GoUrl} port net/mail.ParseAddress and
+ * net/url.Parse; FormatChecksTest compares everything against 10,000 inputs run through the real gojsonschema.
  */
 final class FormatChecks {
     private static final Pattern HOSTNAME = Pattern.compile(
@@ -18,13 +17,7 @@ final class FormatChecks {
     private static final Pattern REL_JSON_POINTER = Pattern.compile("^(?:0|[1-9][0-9]*)(?:#|(?:/(?:[^~/]|~0|~1)*)*)$");
     private static final Pattern DATE = Pattern.compile("(\\d{4})-(\\d{2})-(\\d{2})");
     private static final Pattern CLOCK = Pattern.compile(
-            "(\\d{2}):(\\d{2}):(\\d{2})(?:[.,]\\d+)?(Z|[+-]\\d{2}:\\d{2})?");
-    private static final String ATEXT = "[A-Za-z0-9!#$%&'*+/=?^_`{|}~\\-\\u0080-\\uffff]";
-    private static final Pattern DOT_ATOM = Pattern.compile(ATEXT + "+(?:\\." + ATEXT + "+)*");
-    private static final Pattern QUOTED = Pattern.compile("\"(?:[^\"\\\\\\r\\n]|\\\\.)*\"");
-    private static final Pattern DOMAIN_LITERAL = Pattern.compile("\\[[^\\[\\]\\\\\\r\\n]*]");
-    private static final Pattern PHRASE_WORD = Pattern.compile(
-            "(?:\"(?:[^\"\\\\\\r\\n]|\\\\.)*\"|" + ATEXT + "+(?:\\." + ATEXT + "*)*)");
+            "(\\d{1,2}):(\\d{2}):(\\d{2})(?:[.,]\\d+)?(Z|[+-]\\d{2}:\\d{2})?");
 
     private FormatChecks() {
     }
@@ -37,7 +30,7 @@ final class FormatChecks {
             case "date-time": return s != null && (clock(s, true) || clock(s, false) || date(s) || rfc3339(s));
             case "hostname": return s != null && s.length() < 256 && HOSTNAME.matcher(s).matches();
             case "email":
-            case "idn-email": return s != null && email(s);
+            case "idn-email": return s != null && GoMail.parses(s);
             case "ipv4": return s != null && s.indexOf('.') >= 0 && ip(s);
             case "ipv6": return s != null && s.indexOf(':') >= 0 && ip(s);
             case "uri":
@@ -128,102 +121,19 @@ final class FormatChecks {
     // ---- net/url.Parse ----
 
     private static boolean uri(String s, boolean schemeRequired) {
-        String scheme = urlParse(s);
-        return scheme != null && !s.contains("\\") && (!schemeRequired || !scheme.isEmpty());
+        GoUrl.Parsed p = GoUrl.parse(s);
+        return p != null && !s.contains("\\") && (!schemeRequired || !p.scheme().isEmpty());
     }
 
-    /** Returns the scheme ("" when none) if Go's url.Parse accepts s, else null. */
-    private static String urlParse(String s) {
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            if (c < 0x20 || c == 0x7f) return null;
-        }
-        String rest = s;
-        int hash = rest.indexOf('#');
-        if (hash >= 0) {
-            if (!validPercent(rest.substring(hash + 1))) return null;
-            rest = rest.substring(0, hash);
-        }
-        String scheme = "";
-        for (int i = 0; i < rest.length(); i++) {
-            char c = rest.charAt(i);
-            if (c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z') continue;
-            if (c >= '0' && c <= '9' || c == '+' || c == '-' || c == '.') {
-                if (i == 0) break;
-                continue;
-            }
-            if (c == ':') {
-                if (i == 0) return null;
-                scheme = rest.substring(0, i);
-                rest = rest.substring(i + 1);
-            }
-            break;
-        }
-        int q = rest.indexOf('?');
-        if (q >= 0) rest = rest.substring(0, q);
-        if (scheme.isEmpty() && !rest.startsWith("/")) {
-            int colon = rest.indexOf(':');
-            if (colon >= 0 && (rest.indexOf('/') < 0 || colon < rest.indexOf('/'))) return null;
-        }
-        String path = rest;
-        if (rest.startsWith("//")) {
-            int slash = rest.indexOf('/', 2);
-            String authority = slash >= 0 ? rest.substring(2, slash) : rest.substring(2);
-            path = slash >= 0 ? rest.substring(slash) : "";
-            if (!validAuthority(authority)) return null;
-        }
-        return validPercent(path) ? scheme : null;
-    }
-
-    private static boolean validAuthority(String a) {
-        int at = a.lastIndexOf('@');
-        if (at >= 0) {
-            String user = a.substring(0, at);
-            if (!validPercent(user)) return false;
-            a = a.substring(at + 1);
-        }
-        String host = a;
-        if (a.startsWith("[")) {
-            int close = a.indexOf(']');
-            if (close < 0) return false;
-            String port = a.substring(close + 1);
-            return (port.isEmpty() || port.matches(":\\d*")) && ipv6(a.substring(1, close).replaceAll("%25.*$", ""));
-        }
-        int colon = a.lastIndexOf(':');
-        if (colon >= 0) {
-            if (!a.substring(colon).matches(":\\d*")) return false;
-            host = a.substring(0, colon);
-        }
-        for (int i = 0; i < host.length(); i++) {
-            char c = host.charAt(i);
-            if (c == '%') {
-                if (!validPercent(host.substring(i, Math.min(i + 3, host.length())))) return false;
-            } else if (c == ' ' || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '`'
-                    || c == '{' || c == '|' || c == '}') {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private static boolean validPercent(String s) {
-        for (int i = 0; i < s.length(); i++) {
-            if (s.charAt(i) == '%') {
-                if (i + 2 >= s.length() || Character.digit(s.charAt(i + 1), 16) < 0
-                        || Character.digit(s.charAt(i + 2), 16) < 0) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-
+    /** url.Parse must succeed, and the decoded path must match {@code ^([^{]*({[^}]*})?)*$}. */
     private static boolean uriTemplate(String s) {
-        if (urlParse(s) == null || s.contains("\\")) return false;
-        // ^([^{]*({[^}]*})?)*$ on the path: a '{' opens a group that runs to the next '}' (nested '{' allowed).
-        for (int i = 0; i < s.length(); i++) {
-            if (s.charAt(i) == '{') {
-                i = s.indexOf('}', i);
+        GoUrl.Parsed p = GoUrl.parse(s);
+        if (p == null || s.contains("\\")) return false;
+        String path = p.path();
+        // a '{' opens a group that runs to the next '}' (nested '{' allowed)
+        for (int i = 0; i < path.length(); i++) {
+            if (path.charAt(i) == '{') {
+                i = path.indexOf('}', i);
                 if (i < 0) return false;
             }
         }
@@ -238,36 +148,5 @@ final class FormatChecks {
         } catch (RuntimeException e) {
             return false;
         }
-    }
-
-    // ---- net/mail.ParseAddress ----
-
-    private static boolean email(String s) {
-        s = s.strip();
-        if (s.isEmpty()) return false;
-        if (s.endsWith(">")) {
-            int lt = s.lastIndexOf('<');
-            if (lt < 0) return false;
-            String phrase = s.substring(0, lt).strip();
-            if (!phrase.isEmpty() && !phrase(phrase)) return false;
-            return addrSpec(s.substring(lt + 1, s.length() - 1).strip());
-        }
-        return addrSpec(s);
-    }
-
-    private static boolean phrase(String p) {
-        for (String w : p.split("\\s+")) {
-            if (!PHRASE_WORD.matcher(w).matches()) return false;
-        }
-        return true;
-    }
-
-    private static boolean addrSpec(String a) {
-        int at = a.lastIndexOf('@');
-        if (at <= 0 || at == a.length() - 1) return false;
-        String local = a.substring(0, at);
-        String domain = a.substring(at + 1);
-        boolean localOk = DOT_ATOM.matcher(local).matches() || QUOTED.matcher(local).matches();
-        return localOk && (DOT_ATOM.matcher(domain).matches() || DOMAIN_LITERAL.matcher(domain).matches());
     }
 }

@@ -52,11 +52,7 @@ public final class RemoteContextLoader {
             .connectTimeout(Duration.ofSeconds(5))
             .build();
 
-    private static final ScheduledExecutorService WATCHDOG = Executors.newSingleThreadScheduledExecutor(r -> {
-        Thread t = new Thread(r, "jsonld-context-watchdog");
-        t.setDaemon(true);
-        return t;
-    });
+    private static final ScheduledExecutorService WATCHDOG = BoundedHttp.watchdog("jsonld-context-watchdog");
 
     private static volatile RemoteContextLoader current = new RemoteContextLoader(DEFAULT_CLIENT);
 
@@ -208,8 +204,10 @@ public final class RemoteContextLoader {
 
     private static URI httpTarget(URI base, String target) throws JsonLdLimitException {
         try {
-            return httpUri(base.resolve(new URI(target)).toString());
-        } catch (URISyntaxException e) {
+            URI next = BoundedHttp.resolveLocation(base, target);
+            if (next == null) throw new JsonLdLimitException(Kind.SCHEME, "context URL is not http or https");
+            return httpUri(next.toString());
+        } catch (IOException e) {
             throw new JsonLdLimitException(Kind.SCHEME, "context URL is not http or https");
         }
     }

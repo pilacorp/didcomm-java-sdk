@@ -20,11 +20,11 @@ public final class Rfc3339 {
     }
 
     private static final java.util.regex.Pattern STRICT = java.util.regex.Pattern.compile(
-            "(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})(?:[.,](\\d+))?(?:Z|([+-])(\\d{2}):(\\d{2}))");
+            "(\\d{4})-(\\d{2})-(\\d{2})T(\\d{1,2}):(\\d{2}):(\\d{2})(?:[.,](\\d+))?(?:Z|([+-])(\\d{2}):(\\d{2}))");
 
     /**
      * Go {@code time.Parse(time.RFC3339, s)} (checked against go1.26): upper-case T and Z, a {@code .} or
-     * {@code ,} fraction of any length, no leap second, a zone offset up to 24:60 (hour 0-24, minute 0-60,
+     * {@code ,} fraction of any length, a one-digit hour (month, day, minute and second need two), no leap second, a zone offset up to 24:60 (hour 0-24, minute 0-60,
      * applied arithmetically). The one parser behind VC dates, DID document {@code revoked}, and DidResolver.
      */
     public static Instant parse(String s) throws DateTimeParseException {

@@ -201,7 +201,7 @@ final class CredentialSupport {
                 return Files.readAllBytes(Path.of(uri));
             }
             if ("http".equals(uri.getScheme()) || "https".equals(uri.getScheme())) {
-                BoundedHttp.Response resp = BoundedHttp.get(HTTP, uri, Map.of(), Duration.ofSeconds(10), 10,
+                BoundedHttp.Response resp = BoundedHttp.get(HTTP, uri, Map.of(), Duration.ofSeconds(10), 9,
                         8 << 20, null);
                 if (resp.status() != 200) {
                     throw new Exception("schema endpoint returned " + resp.status());

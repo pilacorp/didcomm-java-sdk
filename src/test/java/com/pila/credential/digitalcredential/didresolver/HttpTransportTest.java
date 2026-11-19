@@ -136,6 +136,30 @@ class HttpTransportTest {
         assertEquals(Kind.BODY_TOO_LARGE, assertThrows(Failure.class, () -> t.resolve("did:example:big")).kind());
     }
 
+    /** An empty Location must not turn a server failure into "DID not found". */
+    @Test
+    void blankLocationKeepsTheRedirectAsTheAnswer() throws Exception {
+        server.createContext("/1.0/identifiers/did:example:zz", ex -> {
+            ex.getResponseHeaders().add("Location", "");
+            ex.sendResponseHeaders(302, -1);
+            ex.close();
+        });
+        reply("/1.0/identifiers/", 404, null, ""); // what the old code reached by resolving "" to the directory
+        var e = assertThrows(BoundedHttp.StatusException.class, () -> new HttpTransport(base, client).resolve("did:example:zz"));
+        assertEquals(302, e.code());
+    }
+
+    @Test
+    void locationWithIllegalCharactersIsFollowed() throws Exception {
+        server.createContext("/1.0/identifiers/did:example:sp", ex -> {
+            ex.getResponseHeaders().add("Location", "/1.0/identifiers/ok one");
+            ex.sendResponseHeaders(302, -1);
+            ex.close();
+        });
+        reply("/1.0/identifiers/ok one", 200, "application/json", "{\"id\":\"x\"}");
+        assertEquals("{\"id\":\"x\"}", new String(new HttpTransport(base, client).resolve("did:example:sp")));
+    }
+
     @Test
     void defaultClientRefusesALocalAddress() {
         Failure e = assertThrows(Failure.class, () -> new HttpTransport(base).resolve(DID));

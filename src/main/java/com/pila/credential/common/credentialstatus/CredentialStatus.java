@@ -40,8 +40,8 @@ public final class CredentialStatus {
         if (url == null || url.isEmpty()) {
             throw new Exception("statusListCredential URL is empty");
         }
-        // Go: http.Client{Timeout: 10s} bounds the whole exchange and follows up to 10 redirects (https to http too).
-        BoundedHttp.Response resp = BoundedHttp.get(HTTP, URI.create(url), Map.of(), Duration.ofSeconds(10), 10,
+        // Go: http.Client{Timeout: 10s} bounds the whole exchange and follows up to 9 redirects (https to http too; the 10th stops it).
+        BoundedHttp.Response resp = BoundedHttp.get(HTTP, URI.create(url), Map.of(), Duration.ofSeconds(10), 9,
                 MAX_RESPONSE_BYTES, null);
         if (resp.status() != 200) {
             throw new Exception("status list credential API returned non-200 status: " + resp.status());

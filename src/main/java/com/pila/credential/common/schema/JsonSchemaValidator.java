@@ -32,9 +32,42 @@ public final class JsonSchemaValidator {
     public static List<String> validate(byte[] schemaJson, Object instance) throws Exception {
         JsonNode schema = MAPPER.readTree(schemaJson);
         JsonNode inst = MAPPER.valueToTree(instance);
+        compilePatterns(schema); // gojsonschema compiles every pattern when it loads the schema
         JsonSchemaValidator v = new JsonSchemaValidator(schema);
         v.check(schema, inst, "(root)", 0);
         return v.errors;
+    }
+
+    /** Fails the schema on a pattern RE2 refuses, even when no value ever reaches it (Go: "pattern must be a valid regex"). */
+    private static void compilePatterns(JsonNode node) throws Exception {
+        if (node.isArray()) {
+            for (JsonNode n : node) compilePatterns(n);
+            return;
+        }
+        if (!node.isObject()) return;
+        var fields = node.fields();
+        while (fields.hasNext()) {
+            var e = fields.next();
+            String k = e.getKey();
+            JsonNode v = e.getValue();
+            if (k.equals("pattern") && v.isTextual()) {
+                compile(v.asText());
+            } else if (k.equals("patternProperties") && v.isObject()) {
+                var pn = v.fieldNames();
+                while (pn.hasNext()) compile(pn.next());
+                for (JsonNode sub : v) compilePatterns(sub);
+            } else if (!k.equals("enum") && !k.equals("const") && !k.equals("default") && !k.equals("examples")) {
+                compilePatterns(v);
+            }
+        }
+    }
+
+    private static void compile(String regex) throws Exception {
+        try {
+            Pattern.compile(regex);
+        } catch (com.google.re2j.PatternSyntaxException e) {
+            throw new Exception("schema: pattern must be a valid regex: " + regex);
+        }
     }
 
     /**
@@ -42,7 +75,7 @@ public final class JsonSchemaValidator {
      * nor a long value can stall the validation or overflow the stack.
      */
     private static boolean find(String regex, String s) {
-        return Pattern.compile(regex).matcher(s).find();
+        return Pattern.compile(regex).matcher(s).find(); // compiled (and so checked) at schema load
     }
 
     private boolean check(JsonNode schema, JsonNode inst, String path, int depth) throws Exception {

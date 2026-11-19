@@ -15,7 +15,7 @@ import java.util.regex.Pattern;
 public final class Rfc3339Nano {
     // Go (checked against go1.26): 'T' and 'Z' upper case, a '.' or ',' fraction, a mandatory zone.
     private static final Pattern RFC3339 = Pattern.compile(
-            "^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})(?:[.,](\\d+))?(?:Z|([+-])(\\d{2}):(\\d{2}))$");
+            "^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{1,2}):(\\d{2}):(\\d{2})(?:[.,](\\d+))?(?:Z|([+-])(\\d{2}):(\\d{2}))$");
 
     private Rfc3339Nano() {
     }
@@ -58,7 +58,7 @@ public final class Rfc3339Nano {
             frac = frac.substring(0, 9);
         }
         frac = frac.replaceFirst("0+$", "");
-        return m.group(1) + "-" + m.group(2) + "-" + m.group(3) + "T" + m.group(4) + ":" + m.group(5) + ":"
+        return m.group(1) + "-" + m.group(2) + "-" + m.group(3) + "T" + String.format("%02d", Integer.parseInt(m.group(4))) + ":" + m.group(5) + ":"
                 + m.group(6) + (frac.isEmpty() ? "" : "." + frac) + zone;
     }
 

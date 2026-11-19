@@ -62,11 +62,12 @@ class ReviewFollowUpTest {
     @Test
     void rfc3339MatchesGo() {
         for (String ok : new String[] {"2024-01-01T00:00:00,5Z", "2024-01-01T00:00:00+19:00", "2024-01-01T00:00:00+24:00",
-                "2024-01-01T00:00:00-00:60", "2024-01-01T00:00:00.1234567890123Z"}) {
+                "2024-01-01T00:00:00-00:60", "2024-01-01T00:00:00.1234567890123Z", "2024-01-01T1:00:00Z",
+                "2024-01-01T9:05:07+07:00"}) {
             assertNotNull(Rfc3339.parse(ok), ok);
         }
         for (String bad : new String[] {"2024-01-01T00:00:00+25:00", "2024-01-01T00:00:00+00:61",
-                "2024-01-01T24:00:00Z", "2024-02-30T00:00:00Z", "2024-01-01T00:00:60Z", "2024-01-01t00:00:00Z"}) {
+                "2024-01-01T24:00:00Z", "2024-1-01T00:00:00Z", "2024-01-1T00:00:00Z", "2024-01-01T00:0:00Z", "2024-01-01T00:00:0Z", "2024-02-30T00:00:00Z", "2024-01-01T00:00:60Z", "2024-01-01t00:00:00Z"}) {
             assertThrows(DateTimeParseException.class, () -> Rfc3339.parse(bad), bad);
         }
         assertEquals(Rfc3339.parse("2024-01-01T00:00:00-00:60"), Rfc3339.parse("2024-01-01T01:00:00Z"));
@@ -98,5 +99,58 @@ class ReviewFollowUpTest {
         doc.setDidDocumentMetadata(om.readValue("{\"\\ud800\":2,\"\\udbff\":1}", type));
         assertEquals("0xc425b54b2782f796e8177bd85f1ba01cba143409526c5a460b1424fd19bbf7c0",
                 com.pila.credential.didv2.Documents.hashDIDDocument(doc));
+    }
+
+    private static String canonJson(String json) throws Exception {
+        var om = new com.fasterxml.jackson.databind.ObjectMapper();
+        Map<String, Object> ctx = new java.util.LinkedHashMap<>();
+        ctx.put("@vocab", "http://ex.org/");
+        ctx.put("js", Map.of("@id", "http://ex.org/js", "@type", "@json"));
+        Map<String, Object> doc = new java.util.LinkedHashMap<>();
+        doc.put("@context", ctx);
+        doc.put("@id", "http://ex.org/s");
+        doc.put("js", om.readValue(json, Object.class));
+        return new String(Processor.canonicalizeDocumentNativeTypes(doc), StandardCharsets.UTF_8);
+    }
+
+    /** Titanium wrote at most 7 decimals, so a tampered @json number still hashed the same. */
+    @Test
+    void jsonLiteralNumbersCannotBeEditedWithoutChangingTheHash() throws Exception {
+        String signed = canonJson("{\"maximum\":0.12345678}");
+        for (String edited : new String[] {"0.12345679", "0.123456789", "0.1234568", "0.12345677", "0.2"}) {
+            assertNotEquals(signed, canonJson("{\"maximum\":" + edited + "}"), edited);
+        }
+    }
+
+    /** Expected lexical forms are go-credential-sdk's processor.Canonicalize output (json-gold v0.7.0). */
+    @Test
+    void jsonLiteralsMatchGo() throws Exception {
+        String rdfJson = "^^<http://www.w3.org/1999/02/22-rdf-syntax-ns#JSON> .\n";
+        String p = "<http://ex.org/s> <http://ex.org/js> \"";
+        assertEquals(p + "{\\\"b\\\":[1,1e+21,3103.6362735313405,1e-7,0,100,100000000000000000000,0.5],"
+                + "\\\"maximum\\\":0.12345678,\\\"n\\\":null,\\\"s\\\":\\\"x\u00e9\\\\n\\\","
+                + "\\\"t\\\":true,\\\"z\\\":{\\\"a\\\":2,\\\"y\\\":1.5}}\"" + rdfJson,
+                canonJson("{\"maximum\":0.12345678,\"b\":[1,1e21,3103.6362735313405,1e-7,-0,100,1e20,0.5],"
+                        + "\"s\":\"x\u00e9\\n\",\"t\":true,\"n\":null,\"z\":{\"y\":1.5,\"a\":2}}"));
+        assertEquals(p + "1.5E0\"" + rdfJson, canonJson("1.5"));
+        assertEquals(p + "1.0E21\"" + rdfJson, canonJson("1e21"));
+        assertEquals(p + "true\"" + rdfJson, canonJson("true"));
+        assertEquals(p + "{}\"" + rdfJson, canonJson("{}"));
+        assertEquals(p + "123456789012345680\"" + rdfJson, canonJson("123456789012345678"));
+        assertEquals(p + "1.0E-1\"" + rdfJson, canonJson("0.1"));
+        assertEquals(p + "JSON Canonicalization error Unexpected EOF reached\"" + rdfJson, canonJson("[]"));
+        assertEquals(p + "JSON Canonicalization error Expected '{' but got 's'\"" + rdfJson, canonJson("\"str\""));
+    }
+
+    @Test
+    void patternsCompileAtSchemaLoad() {
+        // Go: "pattern must be a valid regex", even under a property no value reaches
+        byte[] bad = "{\"properties\":{\"absent\":{\"pattern\":\"(\"}}}".getBytes(StandardCharsets.UTF_8);
+        assertThrows(Exception.class, () -> JsonSchemaValidator.validate(bad, Map.of("other", 1)));
+        byte[] badPp = "{\"patternProperties\":{\"(\":{}}}".getBytes(StandardCharsets.UTF_8);
+        assertThrows(Exception.class, () -> JsonSchemaValidator.validate(badPp, Map.of()));
+        // a data value that merely looks like a keyword is not a pattern
+        byte[] ok = "{\"enum\":[{\"pattern\":\"(\"}]}".getBytes(StandardCharsets.UTF_8);
+        assertDoesNotThrow(() -> JsonSchemaValidator.validate(ok, Map.of("pattern", "(")));
     }
 }

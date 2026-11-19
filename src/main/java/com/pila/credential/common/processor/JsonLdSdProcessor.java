@@ -195,8 +195,13 @@ public final class JsonLdSdProcessor {
             return out;
         }
         if (node instanceof Map<?, ?> m) {
-            if ("@json".equals(m.get("@type"))) {
-                return node; // a JSON literal keeps its own number text
+            if ("@json".equals(m.get("@type")) && m.containsKey("@value")) {
+                // Titanium would re-serialise the numbers of a JSON literal (7 decimals at most, so a signed
+                // value could be edited and still verify); write the literal text json-gold writes instead.
+                Map<String, Object> lit = new java.util.LinkedHashMap<>();
+                lit.put("@value", goJsonLiteral(m.get("@value")));
+                lit.put("@type", "http://www.w3.org/1999/02/22-rdf-syntax-ns#JSON");
+                return lit;
             }
             Map<String, Object> out = new java.util.LinkedHashMap<>();
             for (Map.Entry<?, ?> e : m.entrySet()) out.put((String) e.getKey(), goDoubleLexicals(e.getValue()));
@@ -207,6 +212,56 @@ public final class JsonLdSdProcessor {
             return out;
         }
         return node;
+    }
+
+    private static final ObjectMapper JSON_LITERAL_MAPPER = new ObjectMapper();
+
+    /**
+     * The lexical form json-gold v0.7.0 gives an {@code @json} value (node.go:268-320), quirks included:
+     * a boolean is {@code true}/{@code false}; a number is an integer text when {@code float64(int64(v)) == v},
+     * else the {@code %1.15E} double text; an object is {@code json.Marshal} then RFC 8785 (numbers as float64);
+     * a string is handed to the canonicalizer as raw text, and an array or null is not handled at all, so
+     * their "literal" is the canonicalizer's error message.
+     */
+    static String goJsonLiteral(Object v) {
+        try {
+            if (v instanceof Boolean b) return b.toString();
+            if (v instanceof Number n) {
+                double d = n.doubleValue();
+                return d == Math.rint(d) && d >= -0x1p63 && d < 0x1p63 ? Long.toString((long) d) : goDoubleLexical(d);
+            }
+            if (v instanceof Map<?, ?> m) {
+                return new String(com.pila.credential.didv2.Rfc8785.transform(
+                        JSON_LITERAL_MAPPER.writeValueAsBytes(asFloat64s(m))), java.nio.charset.StandardCharsets.UTF_8);
+            }
+            if (v instanceof String str) {
+                String t = str.stripLeading();
+                if (t.isEmpty()) return "JSON Canonicalization error Unexpected EOF reached";
+                if (t.charAt(0) != '{') {
+                    return "JSON Canonicalization error Expected '{' but got '" + t.charAt(0) + "'";
+                }
+                return new String(com.pila.credential.didv2.Rfc8785.transform(str.getBytes(java.nio.charset.StandardCharsets.UTF_8)),
+                        java.nio.charset.StandardCharsets.UTF_8);
+            }
+        } catch (Exception e) {
+            return "JSON Canonicalization error " + e.getMessage();
+        }
+        return "JSON Canonicalization error Unexpected EOF reached"; // array, null
+    }
+
+    /** Go decodes every JSON number into float64 before json.Marshal. */
+    private static Object asFloat64s(Object node) {
+        if (node instanceof Map<?, ?> m) {
+            Map<String, Object> out = new java.util.LinkedHashMap<>();
+            for (Map.Entry<?, ?> e : m.entrySet()) out.put((String) e.getKey(), asFloat64s(e.getValue()));
+            return out;
+        }
+        if (node instanceof List<?> l) {
+            List<Object> out = new ArrayList<>(l.size());
+            for (Object x : l) out.add(asFloat64s(x));
+            return out;
+        }
+        return node instanceof Number n ? (Object) n.doubleValue() : node;
     }
 
     /** json-gold's {@code %1.15E}: 16 significant digits, exact rounding, mantissa trimmed to >= 1 decimal. */

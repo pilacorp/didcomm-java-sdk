@@ -27,4 +27,24 @@ class FormatChecksTest {
         }
         assertEquals(List.of(), diffs);
     }
+
+    /** 10,000 inputs (email, uri, uri-reference, uri-template) validated by the real gojsonschema v1.2.0. */
+    @Test
+    void differentialAgainstGojsonschema() throws Exception {
+        var om = new com.fasterxml.jackson.databind.ObjectMapper();
+        List<String> diffs = new ArrayList<>();
+        int rows = 0;
+        try (InputStream in = getClass().getResourceAsStream("/gojsonschema-formats-diff.jsonl")) {
+            for (String line : new String(in.readAllBytes(), StandardCharsets.UTF_8).split("\n")) {
+                if (line.isBlank()) continue;
+                var n = om.readTree(line);
+                rows++;
+                if (FormatChecks.isFormat(n.get("f").asText(), n.get("v").asText()) != n.get("ok").asBoolean()) {
+                    diffs.add(n.get("f").asText() + " " + n.get("v").toString() + " want " + n.get("ok").asBoolean());
+                }
+            }
+        }
+        assertEquals(10000, rows);
+        assertEquals(List.of(), diffs.subList(0, Math.min(40, diffs.size())), diffs.size() + " differences");
+    }
 }

@@ -95,4 +95,51 @@ class PinnedHttpTest {
             s.stop(0);
         }
     }
+
+    /** Serves one canned response on a raw socket and returns the request line it saw. */
+    static String rawServe(String response, java.util.function.Consumer<Integer> portSink, java.util.concurrent.atomic.AtomicReference<String> requestLine)
+            throws Exception {
+        java.net.ServerSocket ss = new java.net.ServerSocket(0, 1, InetAddress.getLoopbackAddress());
+        portSink.accept(ss.getLocalPort());
+        Thread t = new Thread(() -> {
+            try (java.net.Socket c = ss.accept()) {
+                var in = new java.io.BufferedReader(new java.io.InputStreamReader(c.getInputStream(), StandardCharsets.UTF_8));
+                requestLine.set(in.readLine());
+                for (String l; (l = in.readLine()) != null && !l.isEmpty(); ) { /* skip headers */ }
+                c.getOutputStream().write(response.getBytes(StandardCharsets.UTF_8));
+                c.getOutputStream().flush();
+            } catch (Exception ignored) {
+                // test over
+            } finally {
+                try { ss.close(); } catch (Exception ignored) { /* closed */ }
+            }
+        });
+        t.setDaemon(true);
+        t.start();
+        return "ok";
+    }
+
+    @Test
+    void skipsInterimResponsesAndEncodesNonAsciiPath() throws Exception {
+        int[] port = new int[1];
+        var line = new java.util.concurrent.atomic.AtomicReference<String>();
+        rawServe("HTTP/1.1 103 Early Hints\r\nLink: </a>; rel=preload\r\n\r\nHTTP/1.1 100 Continue\r\n\r\n"
+                + "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}", p -> port[0] = p, line);
+        var r = PinnedHttp.open(URI.create("http://127.0.0.1:" + port[0] + "/ctx/\u00e9.jsonld?q=\u00e9"), Map.of(),
+                System.nanoTime() + 5 * SEC, a -> true);
+        assertEquals(200, r.status());
+        assertEquals("{}", read(r));
+        assertEquals("GET /ctx/%C3%A9.jsonld?q=%C3%A9 HTTP/1.1", line.get());
+    }
+
+    @Test
+    void locationIsPercentEncodedAndBlankIsNotFollowed() throws Exception {
+        URI base = URI.create("https://h.example/1.0/identifiers/did:x");
+        assertEquals("https://h.example/a%20b", BoundedHttp.resolveLocation(base, "/a b").toString());
+        assertEquals("https://h.example/a%7Cb%7Bc%7D%5E", BoundedHttp.resolveLocation(base, "/a|b{c}^").toString());
+        assertEquals("https://h.example/ctx/%C3%A9.jsonld", BoundedHttp.resolveLocation(base, "/ctx/\u00e9.jsonld").toString());
+        assertEquals("https://h.example/x%20y", BoundedHttp.resolveLocation(base, "/x%20y").toString()); // kept as is
+        assertNull(BoundedHttp.resolveLocation(base, ""));
+        assertNull(BoundedHttp.resolveLocation(base, "  "));
+    }
 }

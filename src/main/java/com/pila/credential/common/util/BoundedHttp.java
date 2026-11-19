@@ -10,7 +10,6 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -95,11 +94,43 @@ public final class BoundedHttp {
     }
 
     private static final Set<Integer> REDIRECTS = Set.of(301, 302, 303, 307, 308);
-    private static final ScheduledExecutorService WATCHDOG = Executors.newSingleThreadScheduledExecutor(r -> {
-        Thread t = new Thread(r, "bounded-http-watchdog");
-        t.setDaemon(true);
-        return t;
-    });
+    private static final ScheduledExecutorService WATCHDOG = watchdog("bounded-http-watchdog");
+
+    /** A daemon timer whose cancelled tasks leave the queue at once (not at their deadline). */
+    public static ScheduledExecutorService watchdog(String name) {
+        java.util.concurrent.ScheduledThreadPoolExecutor ex = new java.util.concurrent.ScheduledThreadPoolExecutor(1, r -> {
+            Thread t = new Thread(r, name);
+            t.setDaemon(true);
+            return t;
+        });
+        ex.setRemoveOnCancelPolicy(true);
+        return ex;
+    }
+
+    /**
+     * Resolves a {@code Location} like Go's {@code url.Parse}+{@code ResolveReference}: characters illegal in a
+     * URI (space, {@code | { } ^ ` < > " \} and non-ASCII, as UTF-8) are percent-encoded, existing {@code %XX}
+     * stay. Returns null for a blank value (the caller then keeps the 3xx as the answer).
+     */
+    public static URI resolveLocation(URI base, String location) throws Failure {
+        if (location == null || location.isBlank()) {
+            return null;
+        }
+        StringBuilder b = new StringBuilder();
+        for (byte x : location.strip().getBytes(java.nio.charset.StandardCharsets.UTF_8)) {
+            int c = x & 0xff;
+            if (c <= 0x20 || c >= 0x7f || "\"<>\\^`{|}".indexOf(c) >= 0) {
+                b.append('%').append(String.format("%02X", c));
+            } else {
+                b.append((char) c);
+            }
+        }
+        try {
+            return base.resolve(new URI(b.toString()));
+        } catch (java.net.URISyntaxException e) {
+            throw new Failure(Kind.REDIRECT_TARGET_NOT_ALLOWED, "redirect target is not a valid URL");
+        }
+    }
 
     private BoundedHttp() {
     }
@@ -122,12 +153,13 @@ public final class BoundedHttp {
             }
             try (Reply res = opener.open(uri, headers, deadline)) {
                 int status = res.status();
-                var location = res.headers().firstValue("location");
-                if (REDIRECTS.contains(status) && location.isPresent()) {
+                URI next = REDIRECTS.contains(status)
+                        ? resolveLocation(uri, res.headers().firstValue("location").orElse(null)) : null;
+                if (next != null) {
                     if (hops >= maxRedirects) {
                         throw new Failure(Kind.TOO_MANY_REDIRECTS, "stopped after " + maxRedirects + " redirects");
                     }
-                    uri = uri.resolve(location.get());
+                    uri = next;
                     continue;
                 }
                 byte[] body = status / 100 == 2 ? readBounded(res.body(), deadline, maxBytes) : new byte[0];
