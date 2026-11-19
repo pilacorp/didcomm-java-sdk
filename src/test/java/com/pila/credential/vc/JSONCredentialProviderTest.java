@@ -38,6 +38,9 @@ public class JSONCredentialProviderTest {
 
             CredentialContents contents = new CredentialContents();
             contents.setIssuer(issuerDid);
+            contents.setSubject(java.util.List.of(new com.pila.credential.vc.Subject("did:example:subject", new java.util.HashMap<>())));
+            contents.setContext(java.util.List.of("https://www.w3.org/ns/credentials/v2"));
+            contents.setTypes(java.util.List.of("VerifiableCredential"));
             contents.setValidFrom(Instant.now());
 
             JSONCredential credential = JSONCredential.newJSONCredential(contents);
@@ -50,9 +53,10 @@ public class JSONCredentialProviderTest {
             @SuppressWarnings("unchecked")
             Map<String, Object> proofMap = (Map<String, Object>) proofObj;
 
-            Object proofValue = proofMap.get("proofValue");
-            assertTrue(proofValue instanceof String);
-            assertEquals(128, ((String) proofValue).length());
+            Object jws = proofMap.get("jws");
+            assertTrue(jws instanceof String);
+            assertTrue(((String) jws).contains(".."));
+            assertEquals("EcdsaSecp256k1Signature2019", proofMap.get("type"));
         } finally {
             server.stop(0);
         }
@@ -72,6 +76,9 @@ public class JSONCredentialProviderTest {
 
             CredentialContents contents = new CredentialContents();
             contents.setIssuer(issuerDid);
+            contents.setSubject(java.util.List.of(new com.pila.credential.vc.Subject("did:example:subject", new java.util.HashMap<>())));
+            contents.setContext(java.util.List.of("https://www.w3.org/ns/credentials/v2"));
+            contents.setTypes(java.util.List.of("VerifiableCredential"));
             contents.setValidFrom(Instant.now());
 
             JSONCredential credential = JSONCredential.newJSONCredential(contents);
@@ -95,6 +102,8 @@ public class JSONCredentialProviderTest {
             throws IOException {
         String body = "{"
                 + "\"id\":\"did:example:issuer\","
+                + "\"assertionMethod\":[\"" + verificationMethodId + "\"],"
+                + "\"authentication\":[\"" + verificationMethodId + "\"],"
                 + "\"verificationMethod\":[{"
                 + "\"id\":\"" + verificationMethodId + "\","
                 + "\"publicKeyHex\":\"" + publicKeyHex + "\""

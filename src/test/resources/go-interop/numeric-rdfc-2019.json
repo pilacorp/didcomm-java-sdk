@@ -1,0 +1,23 @@
+{
+  "@context": [
+    "https://www.w3.org/ns/credentials/v2",
+    "https://www.w3.org/ns/credentials/examples/v2"
+  ],
+  "credentialSubject": {
+    "age": 30,
+    "id": "did:example:subject",
+    "score": 72.5
+  },
+  "id": "urn:uuid:go-numeric-rdfc-001",
+  "issuer": "did:example:gonumeric",
+  "proof": {
+    "created": "2026-11-04T04:12:46Z",
+    "cryptosuite": "ecdsa-rdfc-2019",
+    "proofPurpose": "assertionMethod",
+    "proofValue": "zR4fWyj4RZvUJJud9DYi9Ks7AQycUb5HwAp8uNfx1ugLUkCiaSmXn8mSbSsSUndUBoNB5kjB3P6qZSgFNZWHiHPg",
+    "type": "DataIntegrityProof",
+    "verificationMethod": "did:example:gonumeric#key-1"
+  },
+  "type": "VerifiableCredential",
+  "validFrom": "2025-01-01T00:00:00Z"
+}

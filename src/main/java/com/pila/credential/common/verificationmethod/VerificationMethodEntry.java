@@ -1,13 +1,15 @@
 package com.pila.credential.common.verificationmethod;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 
 /**
- * VerificationMethodEntry represents a single verification method in a DID
- * Document.
+ * VerificationMethodEntry represents a single verification method in a DID Document.
  */
-@Data
+@Getter
+@Setter
+@com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
 public class VerificationMethodEntry {
     @JsonProperty("id")
     private String id;
@@ -23,4 +25,13 @@ public class VerificationMethodEntry {
 
     @JsonProperty("publicKeyJwk")
     private JWK publicKeyJwk;
+
+    @JsonProperty("publicKeyMultibase")
+    private String publicKeyMultibase;
+
+    @JsonProperty("revoked")
+    private String revoked;
+
+    @JsonProperty("revocationReason")
+    private String revocationReason;
 }

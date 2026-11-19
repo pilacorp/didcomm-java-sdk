@@ -48,6 +48,9 @@ public final class DefaultSignerProvider implements SignerProvider {
         }
         String hex = privKeyHex.startsWith("0x") ? privKeyHex.substring(2) : privKeyHex;
         BigInteger d = new BigInteger(1, Hex.decode(hex));
+        if (hex.length() != 64 || d.signum() == 0 || d.compareTo(CURVE_SPEC.getN()) >= 0) {
+            throw new IllegalArgumentException("private key must be 32 bytes with 1 <= d < n");
+        }
         KeyFactory kf = KeyFactory.getInstance("EC", "BC");
         this.privateKey = kf.generatePrivate(new ECPrivateKeySpec(d, CURVE_SPEC));
     }

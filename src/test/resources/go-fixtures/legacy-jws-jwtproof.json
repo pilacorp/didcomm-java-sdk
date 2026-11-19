@@ -1,0 +1,1097 @@
+[
+  {
+    "name": "legacy_numbers",
+    "credential": {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        {
+          "@vocab": "https://example.org/vocab#"
+        }
+      ],
+      "credentialSubject": {
+        "big": 1000000,
+        "epoch": 1700000000,
+        "flag": true,
+        "frac": 3.14159,
+        "huge": 1e+21,
+        "hundred": 100,
+        "id": "did:example:subject",
+        "one": 1,
+        "plain": 42,
+        "tiny": 0.00001
+      },
+      "id": "urn:uuid:fixture-1",
+      "issuer": "did:example:legacy",
+      "proof": {
+        "created": "2026-01-02T00:00:00Z",
+        "cryptosuite": "ecdsa-rdfc-2019",
+        "proofPurpose": "assertionMethod",
+        "proofValue": "07e6cc411584f102e6520edf960e344113728441d4de63ff4567fe118d52a8b26a0df70151f5ceec15449f070f5d069cbbae88eec393052f76caf282253b164200",
+        "type": "DataIntegrityProof",
+        "verificationMethod": "did:example:legacy#key-1"
+      },
+      "type": [
+        "VerifiableCredential"
+      ],
+      "validFrom": "2026-01-01T00:00:00Z"
+    },
+    "didDocument": {
+      "@context": null,
+      "id": "did:example:legacy",
+      "verificationMethod": [
+        {
+          "id": "did:example:legacy#key-1",
+          "type": "EcdsaSecp256k1VerificationKey2019",
+          "controller": "did:example:legacy",
+          "publicKeyHex": "04b35b116329ad5ce292030a63deac8a75428d0029325500aac957bfdb632737464442c01f55fcdac94f902f2092249e899cf995a9ac764cac045de45c3f403db8"
+        }
+      ],
+      "authentication": [
+        "did:example:legacy#key-1"
+      ],
+      "assertionMethod": [
+        "did:example:legacy#key-1"
+      ],
+      "controller": null,
+      "didDocumentMetadata": null
+    },
+    "goVerified": true
+  },
+  {
+    "name": "jws_RS256",
+    "credential": {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        {
+          "@vocab": "https://example.org/vocab#"
+        }
+      ],
+      "credentialSubject": {
+        "id": "did:example:subject",
+        "n": 1
+      },
+      "id": "urn:uuid:fixture-1",
+      "issuer": "did:example:jws-RS256",
+      "proof": {
+        "created": "2026-11-06T08:12:23Z",
+        "jws": "eyJhbGciOiJSUzI1NiIsImI2NCI6ZmFsc2UsImNyaXQiOlsiYjY0Il19..ddyhmwzDADMBM6q8Ot60vvgDat3q0mJG6BCqkHcf2Ie5RJkJLaNrsVU6j4dLXDFhuSMGcYEkJClX2C_F0jUcGOgc3vXbRabVeq87yahJ-o3E3Y7J5kQhivzwAzRwS7uDRt5falG2entJ0J0b65_8oW0ZwFPIKB01_jcICWpFaWPtxyfzDYwp6-knwxI8jMOh8XZXeKUd5zVgKa9Md-LA3NnGDAq0QL0s6eu93eKlvoBv4_ONwLJZACUaCVIyiGEvbpKC7y5A-l22fN-CNFvNxGXh6f1RqOwcQJibIQMVxKQMT6MqkQBmie4nFf1BH6m4mI25K8NWYSR9mCI91RZl3g",
+        "proofPurpose": "assertionMethod",
+        "type": "JsonWebSignature2020",
+        "verificationMethod": "did:example:jws-RS256#key-1"
+      },
+      "type": [
+        "VerifiableCredential"
+      ],
+      "validFrom": "2026-01-01T00:00:00Z"
+    },
+    "didDocument": {
+      "@context": null,
+      "id": "did:example:jws-RS256",
+      "verificationMethod": [
+        {
+          "id": "did:example:jws-RS256#key-1",
+          "type": "JsonWebKey2020",
+          "controller": "did:example:jws-RS256",
+          "publicKeyJwk": {
+            "kty": "RSA",
+            "n": "uhK7Fzs3ahGAqtHmU69Tn1v9hXPy72pYsDrfH-eZb3yt2buLjXEqtxGXW3QSmW8-Uz6oIzK0eOSlhJcSsqT9NaQWDdiSnSWCY2xQKJzfFZf8jlRPpIeeYy19FD3JH0tmKBtPgPSSKOSnEYctlaBohwGESJhQuKCze8cgD7Lv397aIGdJhCachvUHopyGGBjoHk7B7WEI2wK-NJad8J00ZmusTIm2NvBcIiZxABVAT2hAHcluyUdVfyM7sY4ueBDojzrAtilt82gIQMfS3HMCZ8k9ZvV5SZjFz5xUircjnGAe3tY16QjUpmAT15ytUyGukuZAX8158yWgeS-ckOHvZw",
+            "e": "AQAB"
+          }
+        }
+      ],
+      "authentication": [
+        "did:example:jws-RS256#key-1"
+      ],
+      "assertionMethod": [
+        "did:example:jws-RS256#key-1"
+      ],
+      "controller": null,
+      "didDocumentMetadata": null
+    },
+    "goVerified": true
+  },
+  {
+    "name": "jws_RS384",
+    "credential": {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        {
+          "@vocab": "https://example.org/vocab#"
+        }
+      ],
+      "credentialSubject": {
+        "id": "did:example:subject",
+        "n": 1
+      },
+      "id": "urn:uuid:fixture-1",
+      "issuer": "did:example:jws-RS384",
+      "proof": {
+        "created": "2026-11-06T08:12:23Z",
+        "jws": "eyJhbGciOiJSUzM4NCIsImI2NCI6ZmFsc2UsImNyaXQiOlsiYjY0Il19..i6m1BGc9xvnhpurTZknigZO6UQ0FGIyrtd-zAewAFDvXqAWk1u29LJYChf88SOR9JoSzADr3GsUpJzTKKRDrmrtMyqwVPuZpNlJvnJNo2S6A0zlJ1c_O5orGO2VymI9_afWGzljTRs_exqAFaQs0Q-fq3SwnWyUxhj3vUcGVT0_WyjJc4jsxfW38TfOvDxF5Huu9pdJvcYdKR4UXk7VJKesQGhdLiHjQXbQsNeS7j30aewIg5FH1kkdUyL_IOaV-N-XSZeReYcgA_3ClfOzEQ6jRjCCzAaezkZrYWUQA3ovBd4Fb2BoVaW1Flaxvv4AVVDw-zpc-2WFC08jEW8ruKg",
+        "proofPurpose": "assertionMethod",
+        "type": "JsonWebSignature2020",
+        "verificationMethod": "did:example:jws-RS384#key-1"
+      },
+      "type": [
+        "VerifiableCredential"
+      ],
+      "validFrom": "2026-01-01T00:00:00Z"
+    },
+    "didDocument": {
+      "@context": null,
+      "id": "did:example:jws-RS384",
+      "verificationMethod": [
+        {
+          "id": "did:example:jws-RS384#key-1",
+          "type": "JsonWebKey2020",
+          "controller": "did:example:jws-RS384",
+          "publicKeyJwk": {
+            "kty": "RSA",
+            "n": "uhK7Fzs3ahGAqtHmU69Tn1v9hXPy72pYsDrfH-eZb3yt2buLjXEqtxGXW3QSmW8-Uz6oIzK0eOSlhJcSsqT9NaQWDdiSnSWCY2xQKJzfFZf8jlRPpIeeYy19FD3JH0tmKBtPgPSSKOSnEYctlaBohwGESJhQuKCze8cgD7Lv397aIGdJhCachvUHopyGGBjoHk7B7WEI2wK-NJad8J00ZmusTIm2NvBcIiZxABVAT2hAHcluyUdVfyM7sY4ueBDojzrAtilt82gIQMfS3HMCZ8k9ZvV5SZjFz5xUircjnGAe3tY16QjUpmAT15ytUyGukuZAX8158yWgeS-ckOHvZw",
+            "e": "AQAB"
+          }
+        }
+      ],
+      "authentication": [
+        "did:example:jws-RS384#key-1"
+      ],
+      "assertionMethod": [
+        "did:example:jws-RS384#key-1"
+      ],
+      "controller": null,
+      "didDocumentMetadata": null
+    },
+    "goVerified": true
+  },
+  {
+    "name": "jws_RS512",
+    "credential": {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        {
+          "@vocab": "https://example.org/vocab#"
+        }
+      ],
+      "credentialSubject": {
+        "id": "did:example:subject",
+        "n": 1
+      },
+      "id": "urn:uuid:fixture-1",
+      "issuer": "did:example:jws-RS512",
+      "proof": {
+        "created": "2026-11-06T08:12:23Z",
+        "jws": "eyJhbGciOiJSUzUxMiIsImI2NCI6ZmFsc2UsImNyaXQiOlsiYjY0Il19..tJBjcYftOUqH75jvJK_TuZRUE00lRT_JYbmAZCmDpHoN5WaOYhaVCyDKcEIdoRsKec5OLEHjXk2kFN_eOf12U_6E4qRKAY2U-uptspUDvQ5fnXEARFMlHKvbRhtwopKVUuBxKIZXYl3C7HGg0q3ww8MK7QIvvGlmmHnW8DAQfTzu17EMWWD7B3z-TM5BfG_WDaqkXuqYnPDwPg-THXOHKB9mspaCH4YUhSM5-nPW5_Bt71oNlCdFaAZ6y0RYRSScvjtgBtjQuGqtVRKgNLI5mjlyTnUFddoKja4uOMMIET9-JU4fJy8I3D8dvR2OjPVsZvQPtwp_IHp3J0rbR1NzSA",
+        "proofPurpose": "assertionMethod",
+        "type": "JsonWebSignature2020",
+        "verificationMethod": "did:example:jws-RS512#key-1"
+      },
+      "type": [
+        "VerifiableCredential"
+      ],
+      "validFrom": "2026-01-01T00:00:00Z"
+    },
+    "didDocument": {
+      "@context": null,
+      "id": "did:example:jws-RS512",
+      "verificationMethod": [
+        {
+          "id": "did:example:jws-RS512#key-1",
+          "type": "JsonWebKey2020",
+          "controller": "did:example:jws-RS512",
+          "publicKeyJwk": {
+            "kty": "RSA",
+            "n": "uhK7Fzs3ahGAqtHmU69Tn1v9hXPy72pYsDrfH-eZb3yt2buLjXEqtxGXW3QSmW8-Uz6oIzK0eOSlhJcSsqT9NaQWDdiSnSWCY2xQKJzfFZf8jlRPpIeeYy19FD3JH0tmKBtPgPSSKOSnEYctlaBohwGESJhQuKCze8cgD7Lv397aIGdJhCachvUHopyGGBjoHk7B7WEI2wK-NJad8J00ZmusTIm2NvBcIiZxABVAT2hAHcluyUdVfyM7sY4ueBDojzrAtilt82gIQMfS3HMCZ8k9ZvV5SZjFz5xUircjnGAe3tY16QjUpmAT15ytUyGukuZAX8158yWgeS-ckOHvZw",
+            "e": "AQAB"
+          }
+        }
+      ],
+      "authentication": [
+        "did:example:jws-RS512#key-1"
+      ],
+      "assertionMethod": [
+        "did:example:jws-RS512#key-1"
+      ],
+      "controller": null,
+      "didDocumentMetadata": null
+    },
+    "goVerified": true
+  },
+  {
+    "name": "jws_PS256",
+    "credential": {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        {
+          "@vocab": "https://example.org/vocab#"
+        }
+      ],
+      "credentialSubject": {
+        "id": "did:example:subject",
+        "n": 1
+      },
+      "id": "urn:uuid:fixture-1",
+      "issuer": "did:example:jws-PS256",
+      "proof": {
+        "created": "2026-11-06T08:12:23Z",
+        "jws": "eyJhbGciOiJQUzI1NiIsImI2NCI6ZmFsc2UsImNyaXQiOlsiYjY0Il19..gahH7AGpAvmGKFR1XOOMNSTtgA4AnT7l72xc6XUzpd5V8m6zl2VLtsU7zr_H7UxyI8-lo8kqvCXI9JDDqs8o8WVaHui8CwQ_ptbJCj_SCXWbncGXo2kARL09snH9l8IHk5PhPIB1tjezVlppCN2K8cUL9fkI-C5C6YTjIFz5lX2bt4wgcioiN1KIjp4vMMbyMijBa0IBwlTjn5BpIV2SYcWBcdhIJ9DktQ7dgCwPphpDyw1WEmNPncpl5Eu3G03IpxR9r1pUO5Lt9HvaP6rD_naOolUi-blVgvYULL_VwmitZBiiYK_QQl4idGZu_H3fbU4Cj5L0LREak8PhTHbNRQ",
+        "proofPurpose": "assertionMethod",
+        "type": "JsonWebSignature2020",
+        "verificationMethod": "did:example:jws-PS256#key-1"
+      },
+      "type": [
+        "VerifiableCredential"
+      ],
+      "validFrom": "2026-01-01T00:00:00Z"
+    },
+    "didDocument": {
+      "@context": null,
+      "id": "did:example:jws-PS256",
+      "verificationMethod": [
+        {
+          "id": "did:example:jws-PS256#key-1",
+          "type": "JsonWebKey2020",
+          "controller": "did:example:jws-PS256",
+          "publicKeyJwk": {
+            "kty": "RSA",
+            "n": "uhK7Fzs3ahGAqtHmU69Tn1v9hXPy72pYsDrfH-eZb3yt2buLjXEqtxGXW3QSmW8-Uz6oIzK0eOSlhJcSsqT9NaQWDdiSnSWCY2xQKJzfFZf8jlRPpIeeYy19FD3JH0tmKBtPgPSSKOSnEYctlaBohwGESJhQuKCze8cgD7Lv397aIGdJhCachvUHopyGGBjoHk7B7WEI2wK-NJad8J00ZmusTIm2NvBcIiZxABVAT2hAHcluyUdVfyM7sY4ueBDojzrAtilt82gIQMfS3HMCZ8k9ZvV5SZjFz5xUircjnGAe3tY16QjUpmAT15ytUyGukuZAX8158yWgeS-ckOHvZw",
+            "e": "AQAB"
+          }
+        }
+      ],
+      "authentication": [
+        "did:example:jws-PS256#key-1"
+      ],
+      "assertionMethod": [
+        "did:example:jws-PS256#key-1"
+      ],
+      "controller": null,
+      "didDocumentMetadata": null
+    },
+    "goVerified": true
+  },
+  {
+    "name": "jws_PS384",
+    "credential": {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        {
+          "@vocab": "https://example.org/vocab#"
+        }
+      ],
+      "credentialSubject": {
+        "id": "did:example:subject",
+        "n": 1
+      },
+      "id": "urn:uuid:fixture-1",
+      "issuer": "did:example:jws-PS384",
+      "proof": {
+        "created": "2026-11-06T08:12:23Z",
+        "jws": "eyJhbGciOiJQUzM4NCIsImI2NCI6ZmFsc2UsImNyaXQiOlsiYjY0Il19..LuoOlV_wIpue4dGOn5T_9zkWcUuzkmue7gpsUFFCE6wnYfy7zaUbj-lElw0GsipX32xDJYgErF3DhkkQ2BFyJXqweCnju7CTajQfuormnqDAzsZeeNxkmsHWJl0Yb8BDrguexRQNW3-Rv_nBGHfmOezxxBe3rMTYH1KwtoxSV_Z86qhKkSWbCjfrXdhU61lfNeOU65tWiJetC6cGr5tB4MAzzk8x81pu-o91g62usAhVdI54XKxuiEIkqBA89DhkKqmW6PK9rKyLL_2kWgTkAEwy2q0RuufLPG9kMgl3zQ2sWPJfwRzqHSPoQBcvtr7joV8_zNK9_775XpsIW3ymZw",
+        "proofPurpose": "assertionMethod",
+        "type": "JsonWebSignature2020",
+        "verificationMethod": "did:example:jws-PS384#key-1"
+      },
+      "type": [
+        "VerifiableCredential"
+      ],
+      "validFrom": "2026-01-01T00:00:00Z"
+    },
+    "didDocument": {
+      "@context": null,
+      "id": "did:example:jws-PS384",
+      "verificationMethod": [
+        {
+          "id": "did:example:jws-PS384#key-1",
+          "type": "JsonWebKey2020",
+          "controller": "did:example:jws-PS384",
+          "publicKeyJwk": {
+            "kty": "RSA",
+            "n": "uhK7Fzs3ahGAqtHmU69Tn1v9hXPy72pYsDrfH-eZb3yt2buLjXEqtxGXW3QSmW8-Uz6oIzK0eOSlhJcSsqT9NaQWDdiSnSWCY2xQKJzfFZf8jlRPpIeeYy19FD3JH0tmKBtPgPSSKOSnEYctlaBohwGESJhQuKCze8cgD7Lv397aIGdJhCachvUHopyGGBjoHk7B7WEI2wK-NJad8J00ZmusTIm2NvBcIiZxABVAT2hAHcluyUdVfyM7sY4ueBDojzrAtilt82gIQMfS3HMCZ8k9ZvV5SZjFz5xUircjnGAe3tY16QjUpmAT15ytUyGukuZAX8158yWgeS-ckOHvZw",
+            "e": "AQAB"
+          }
+        }
+      ],
+      "authentication": [
+        "did:example:jws-PS384#key-1"
+      ],
+      "assertionMethod": [
+        "did:example:jws-PS384#key-1"
+      ],
+      "controller": null,
+      "didDocumentMetadata": null
+    },
+    "goVerified": true
+  },
+  {
+    "name": "jws_PS512",
+    "credential": {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        {
+          "@vocab": "https://example.org/vocab#"
+        }
+      ],
+      "credentialSubject": {
+        "id": "did:example:subject",
+        "n": 1
+      },
+      "id": "urn:uuid:fixture-1",
+      "issuer": "did:example:jws-PS512",
+      "proof": {
+        "created": "2026-11-06T08:12:23Z",
+        "jws": "eyJhbGciOiJQUzUxMiIsImI2NCI6ZmFsc2UsImNyaXQiOlsiYjY0Il19..Vt7J3yXMb4bHt2rIcFu3Thtg7E1UtNncakwNi6tUrpuqVVTw-pQWrhrrT-WrlMVLODfwcbmz42xwAQzvvirvSEMZPzsEttU9Gd7jqcyHUZQBiYwehnxQ_DGePGzr8Tur759po8Pqs0_fqujrklJ6t75vTa-5VxPhm17GEDBDtHcjp0MVoGSUNJIBc9wUqovH0Ek0I2b279wk4f5LAMT1J_dow_LeCm4R1UMQHgdGcz-9T2NkS89n9MqH72I0zt-_79fDhvq6SQHJty1X9vWreA-BVHulGA6F7NtMmWElJ8o2kDlcxshyQ-mRE6RnzZrGP4RGaPc6yOAi4D-laiOYVw",
+        "proofPurpose": "assertionMethod",
+        "type": "JsonWebSignature2020",
+        "verificationMethod": "did:example:jws-PS512#key-1"
+      },
+      "type": [
+        "VerifiableCredential"
+      ],
+      "validFrom": "2026-01-01T00:00:00Z"
+    },
+    "didDocument": {
+      "@context": null,
+      "id": "did:example:jws-PS512",
+      "verificationMethod": [
+        {
+          "id": "did:example:jws-PS512#key-1",
+          "type": "JsonWebKey2020",
+          "controller": "did:example:jws-PS512",
+          "publicKeyJwk": {
+            "kty": "RSA",
+            "n": "uhK7Fzs3ahGAqtHmU69Tn1v9hXPy72pYsDrfH-eZb3yt2buLjXEqtxGXW3QSmW8-Uz6oIzK0eOSlhJcSsqT9NaQWDdiSnSWCY2xQKJzfFZf8jlRPpIeeYy19FD3JH0tmKBtPgPSSKOSnEYctlaBohwGESJhQuKCze8cgD7Lv397aIGdJhCachvUHopyGGBjoHk7B7WEI2wK-NJad8J00ZmusTIm2NvBcIiZxABVAT2hAHcluyUdVfyM7sY4ueBDojzrAtilt82gIQMfS3HMCZ8k9ZvV5SZjFz5xUircjnGAe3tY16QjUpmAT15ytUyGukuZAX8158yWgeS-ckOHvZw",
+            "e": "AQAB"
+          }
+        }
+      ],
+      "authentication": [
+        "did:example:jws-PS512#key-1"
+      ],
+      "assertionMethod": [
+        "did:example:jws-PS512#key-1"
+      ],
+      "controller": null,
+      "didDocumentMetadata": null
+    },
+    "goVerified": true
+  },
+  {
+    "name": "jws_ES256",
+    "credential": {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        {
+          "@vocab": "https://example.org/vocab#"
+        }
+      ],
+      "credentialSubject": {
+        "id": "did:example:subject",
+        "n": 1
+      },
+      "id": "urn:uuid:fixture-1",
+      "issuer": "did:example:jws-ES256",
+      "proof": {
+        "created": "2026-11-06T08:12:23Z",
+        "jws": "eyJhbGciOiJFUzI1NiIsImI2NCI6ZmFsc2UsImNyaXQiOlsiYjY0Il19..u7MODoM94fqjOQyzOPom7EXrSCwTTXhdyQ_L9dORsAtdtcj5Iiyvw-7gAVWID7sIZy60i1HqOhl-cyoHu71Vog",
+        "proofPurpose": "assertionMethod",
+        "type": "JsonWebSignature2020",
+        "verificationMethod": "did:example:jws-ES256#key-1"
+      },
+      "type": [
+        "VerifiableCredential"
+      ],
+      "validFrom": "2026-01-01T00:00:00Z"
+    },
+    "didDocument": {
+      "@context": null,
+      "id": "did:example:jws-ES256",
+      "verificationMethod": [
+        {
+          "id": "did:example:jws-ES256#key-1",
+          "type": "JsonWebKey2020",
+          "controller": "did:example:jws-ES256",
+          "publicKeyJwk": {
+            "kty": "EC",
+            "crv": "P-256",
+            "x": "01uwWkIO8DJgKC9YJ5yHXGUbqoSuXNea5RdQ-IAQNzg",
+            "y": "6TgeHSqQDkAbeNXeVe73POqJFFjk_jA_bLf9xl_CHD4"
+          }
+        }
+      ],
+      "authentication": [
+        "did:example:jws-ES256#key-1"
+      ],
+      "assertionMethod": [
+        "did:example:jws-ES256#key-1"
+      ],
+      "controller": null,
+      "didDocumentMetadata": null
+    },
+    "goVerified": true
+  },
+  {
+    "name": "jwtproof_65_vm",
+    "credential": {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        {
+          "@vocab": "https://example.org/vocab#"
+        }
+      ],
+      "credentialSubject": {
+        "id": "did:example:subject",
+        "n": 1
+      },
+      "id": "urn:uuid:fixture-1",
+      "issuer": "did:example:jwtproof",
+      "proof": {
+        "created": "2026-01-02T00:00:00Z",
+        "jwt": "eyJhbGciOiJFUzI1NksiLCJraWQiOiJkaWQ6ZXhhbXBsZTpqd3Rwcm9vZiNrZXktMSJ9.eyJpc3MiOiJkaWQ6ZXhhbXBsZTpqd3Rwcm9vZiIsInZjIjp7IngiOjF9fQ.8xn9AXW0lisjKPgMF8A2HijnQb0NNSA3il-K8crsEiVBtZqqfoP97LuIvkCBt66sTyrhmdz3oYjvWv8WlX1eJAA",
+        "proofPurpose": "assertionMethod",
+        "type": "JwtProof2020",
+        "verificationMethod": "did:example:jwtproof#key-1"
+      },
+      "type": [
+        "VerifiableCredential"
+      ],
+      "validFrom": "2026-01-01T00:00:00Z"
+    },
+    "didDocument": {
+      "@context": null,
+      "id": "did:example:jwtproof",
+      "verificationMethod": [
+        {
+          "id": "did:example:jwtproof#key-1",
+          "type": "EcdsaSecp256k1VerificationKey2019",
+          "controller": "did:example:jwtproof",
+          "publicKeyHex": "04b35b116329ad5ce292030a63deac8a75428d0029325500aac957bfdb632737464442c01f55fcdac94f902f2092249e899cf995a9ac764cac045de45c3f403db8"
+        }
+      ],
+      "authentication": [
+        "did:example:jwtproof#key-1"
+      ],
+      "assertionMethod": [
+        "did:example:jwtproof#key-1"
+      ],
+      "controller": null,
+      "didDocumentMetadata": null
+    },
+    "goVerified": true
+  },
+  {
+    "name": "jwtproof_65_kid",
+    "credential": {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        {
+          "@vocab": "https://example.org/vocab#"
+        }
+      ],
+      "credentialSubject": {
+        "id": "did:example:subject",
+        "n": 1
+      },
+      "id": "urn:uuid:fixture-1",
+      "issuer": "did:example:jwtproof",
+      "proof": {
+        "created": "2026-01-02T00:00:00Z",
+        "jws": "eyJhbGciOiJFUzI1NksiLCJraWQiOiJkaWQ6ZXhhbXBsZTpqd3Rwcm9vZiNrZXktMSJ9..",
+        "jwt": "eyJhbGciOiJFUzI1NksiLCJraWQiOiJkaWQ6ZXhhbXBsZTpqd3Rwcm9vZiNrZXktMSJ9.eyJpc3MiOiJkaWQ6ZXhhbXBsZTpqd3Rwcm9vZiIsInZjIjp7IngiOjF9fQ.8xn9AXW0lisjKPgMF8A2HijnQb0NNSA3il-K8crsEiVBtZqqfoP97LuIvkCBt66sTyrhmdz3oYjvWv8WlX1eJAA",
+        "proofPurpose": "assertionMethod",
+        "type": "JwtProof2020"
+      },
+      "type": [
+        "VerifiableCredential"
+      ],
+      "validFrom": "2026-01-01T00:00:00Z"
+    },
+    "didDocument": {
+      "@context": null,
+      "id": "did:example:jwtproof",
+      "verificationMethod": [
+        {
+          "id": "did:example:jwtproof#key-1",
+          "type": "EcdsaSecp256k1VerificationKey2019",
+          "controller": "did:example:jwtproof",
+          "publicKeyHex": "04b35b116329ad5ce292030a63deac8a75428d0029325500aac957bfdb632737464442c01f55fcdac94f902f2092249e899cf995a9ac764cac045de45c3f403db8"
+        }
+      ],
+      "authentication": [
+        "did:example:jwtproof#key-1"
+      ],
+      "assertionMethod": [
+        "did:example:jwtproof#key-1"
+      ],
+      "controller": null,
+      "didDocumentMetadata": null
+    },
+    "goVerified": true
+  },
+  {
+    "name": "jwtproof_64",
+    "credential": {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        {
+          "@vocab": "https://example.org/vocab#"
+        }
+      ],
+      "credentialSubject": {
+        "id": "did:example:subject",
+        "n": 1
+      },
+      "id": "urn:uuid:fixture-1",
+      "issuer": "did:example:jwtproof",
+      "proof": {
+        "created": "2026-01-02T00:00:00Z",
+        "jwt": "eyJhbGciOiJFUzI1NksiLCJraWQiOiJkaWQ6ZXhhbXBsZTpqd3Rwcm9vZiNrZXktMSJ9.eyJpc3MiOiJkaWQ6ZXhhbXBsZTpqd3Rwcm9vZiIsInZjIjp7IngiOjF9fQ.8xn9AXW0lisjKPgMF8A2HijnQb0NNSA3il-K8crsEiVBtZqqfoP97LuIvkCBt66sTyrhmdz3oYjvWv8WlX1eJA",
+        "proofPurpose": "assertionMethod",
+        "type": "JwtProof2020",
+        "verificationMethod": "did:example:jwtproof#key-1"
+      },
+      "type": [
+        "VerifiableCredential"
+      ],
+      "validFrom": "2026-01-01T00:00:00Z"
+    },
+    "didDocument": {
+      "@context": null,
+      "id": "did:example:jwtproof",
+      "verificationMethod": [
+        {
+          "id": "did:example:jwtproof#key-1",
+          "type": "EcdsaSecp256k1VerificationKey2019",
+          "controller": "did:example:jwtproof",
+          "publicKeyHex": "04b35b116329ad5ce292030a63deac8a75428d0029325500aac957bfdb632737464442c01f55fcdac94f902f2092249e899cf995a9ac764cac045de45c3f403db8"
+        }
+      ],
+      "authentication": [
+        "did:example:jwtproof#key-1"
+      ],
+      "assertionMethod": [
+        "did:example:jwtproof#key-1"
+      ],
+      "controller": null,
+      "didDocumentMetadata": null
+    },
+    "goVerified": true
+  },
+  {
+    "name": "jwtproof_64_highS",
+    "credential": {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        {
+          "@vocab": "https://example.org/vocab#"
+        }
+      ],
+      "credentialSubject": {
+        "id": "did:example:subject",
+        "n": 1
+      },
+      "id": "urn:uuid:fixture-1",
+      "issuer": "did:example:jwtproof",
+      "proof": {
+        "created": "2026-01-02T00:00:00Z",
+        "jwt": "eyJhbGciOiJFUzI1NksiLCJraWQiOiJkaWQ6ZXhhbXBsZTpqd3Rwcm9vZiNrZXktMSJ9.eyJpc3MiOiJkaWQ6ZXhhbXBsZTpqd3Rwcm9vZiIsInZjIjp7IngiOjF9fQ.8xn9AXW0lisjKPgMF8A2HijnQb0NNSA3il-K8crsEiW-SmVVgXwCE0R3Qb9-SFFSa4P7TNJQ_rLQd192OrjjHQ",
+        "proofPurpose": "assertionMethod",
+        "type": "JwtProof2020",
+        "verificationMethod": "did:example:jwtproof#key-1"
+      },
+      "type": [
+        "VerifiableCredential"
+      ],
+      "validFrom": "2026-01-01T00:00:00Z"
+    },
+    "didDocument": {
+      "@context": null,
+      "id": "did:example:jwtproof",
+      "verificationMethod": [
+        {
+          "id": "did:example:jwtproof#key-1",
+          "type": "EcdsaSecp256k1VerificationKey2019",
+          "controller": "did:example:jwtproof",
+          "publicKeyHex": "04b35b116329ad5ce292030a63deac8a75428d0029325500aac957bfdb632737464442c01f55fcdac94f902f2092249e899cf995a9ac764cac045de45c3f403db8"
+        }
+      ],
+      "authentication": [
+        "did:example:jwtproof#key-1"
+      ],
+      "assertionMethod": [
+        "did:example:jwtproof#key-1"
+      ],
+      "controller": null,
+      "didDocumentMetadata": null
+    },
+    "goVerified": false
+  },
+  {
+    "name": "jwtproof_65_badv",
+    "credential": {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        {
+          "@vocab": "https://example.org/vocab#"
+        }
+      ],
+      "credentialSubject": {
+        "id": "did:example:subject",
+        "n": 1
+      },
+      "id": "urn:uuid:fixture-1",
+      "issuer": "did:example:jwtproof",
+      "proof": {
+        "created": "2026-01-02T00:00:00Z",
+        "jwt": "eyJhbGciOiJFUzI1NksiLCJraWQiOiJkaWQ6ZXhhbXBsZTpqd3Rwcm9vZiNrZXktMSJ9.eyJpc3MiOiJkaWQ6ZXhhbXBsZTpqd3Rwcm9vZiIsInZjIjp7IngiOjF9fQ.8xn9AXW0lisjKPgMF8A2HijnQb0NNSA3il-K8crsEiVBtZqqfoP97LuIvkCBt66sTyrhmdz3oYjvWv8WlX1eJAE",
+        "proofPurpose": "assertionMethod",
+        "type": "JwtProof2020",
+        "verificationMethod": "did:example:jwtproof#key-1"
+      },
+      "type": [
+        "VerifiableCredential"
+      ],
+      "validFrom": "2026-01-01T00:00:00Z"
+    },
+    "didDocument": {
+      "@context": null,
+      "id": "did:example:jwtproof",
+      "verificationMethod": [
+        {
+          "id": "did:example:jwtproof#key-1",
+          "type": "EcdsaSecp256k1VerificationKey2019",
+          "controller": "did:example:jwtproof",
+          "publicKeyHex": "04b35b116329ad5ce292030a63deac8a75428d0029325500aac957bfdb632737464442c01f55fcdac94f902f2092249e899cf995a9ac764cac045de45c3f403db8"
+        }
+      ],
+      "authentication": [
+        "did:example:jwtproof#key-1"
+      ],
+      "assertionMethod": [
+        "did:example:jwtproof#key-1"
+      ],
+      "controller": null,
+      "didDocumentMetadata": null
+    },
+    "goVerified": false
+  },
+  {
+    "name": "jwtproof_65_highS",
+    "credential": {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        {
+          "@vocab": "https://example.org/vocab#"
+        }
+      ],
+      "credentialSubject": {
+        "id": "did:example:subject",
+        "n": 1
+      },
+      "id": "urn:uuid:fixture-1",
+      "issuer": "did:example:jwtproof",
+      "proof": {
+        "created": "2026-01-02T00:00:00Z",
+        "jwt": "eyJhbGciOiJFUzI1NksiLCJraWQiOiJkaWQ6ZXhhbXBsZTpqd3Rwcm9vZiNrZXktMSJ9.eyJpc3MiOiJkaWQ6ZXhhbXBsZTpqd3Rwcm9vZiIsInZjIjp7IngiOjF9fQ.8xn9AXW0lisjKPgMF8A2HijnQb0NNSA3il-K8crsEiW-SmVVgXwCE0R3Qb9-SFFSa4P7TNJQ_rLQd192OrjjHQE",
+        "proofPurpose": "assertionMethod",
+        "type": "JwtProof2020",
+        "verificationMethod": "did:example:jwtproof#key-1"
+      },
+      "type": [
+        "VerifiableCredential"
+      ],
+      "validFrom": "2026-01-01T00:00:00Z"
+    },
+    "didDocument": {
+      "@context": null,
+      "id": "did:example:jwtproof",
+      "verificationMethod": [
+        {
+          "id": "did:example:jwtproof#key-1",
+          "type": "EcdsaSecp256k1VerificationKey2019",
+          "controller": "did:example:jwtproof",
+          "publicKeyHex": "04b35b116329ad5ce292030a63deac8a75428d0029325500aac957bfdb632737464442c01f55fcdac94f902f2092249e899cf995a9ac764cac045de45c3f403db8"
+        }
+      ],
+      "authentication": [
+        "did:example:jwtproof#key-1"
+      ],
+      "assertionMethod": [
+        "did:example:jwtproof#key-1"
+      ],
+      "controller": null,
+      "didDocumentMetadata": null
+    },
+    "goVerified": true
+  },
+  {
+    "name": "rdfc_extra_fields",
+    "credential": {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        {
+          "@vocab": "https://example.org/vocab#"
+        }
+      ],
+      "credentialSubject": {
+        "id": "did:example:subject",
+        "n": 1
+      },
+      "id": "urn:uuid:fixture-1",
+      "issuer": "did:example:extras",
+      "proof": {
+        "challenge": "c-1",
+        "created": "2026-01-02T00:00:00Z",
+        "cryptosuite": "ecdsa-rdfc-2019",
+        "domain": [
+          "a.example",
+          "b.example"
+        ],
+        "expires": "2027-01-02T00:00:00Z",
+        "id": "urn:uuid:proof-1",
+        "nonce": "n-1",
+        "proofPurpose": "assertionMethod",
+        "proofValue": "z3gfTdQkhbK4FUHDTAVbbBuo1sR5xt2fz9fCB3zP1qZqASJgHTrPRtnRwPW7F6aRULSWikeZiaUcz3gWXhNDoJ2Vq",
+        "type": "DataIntegrityProof",
+        "verificationMethod": "did:example:extras#key-1"
+      },
+      "type": [
+        "VerifiableCredential"
+      ],
+      "validFrom": "2026-01-01T00:00:00Z"
+    },
+    "didDocument": {
+      "@context": null,
+      "id": "did:example:extras",
+      "verificationMethod": [
+        {
+          "id": "did:example:extras#key-1",
+          "type": "Multikey",
+          "controller": "did:example:extras",
+          "publicKeyMultibase": "zDnaeSEYx44iP9rpAFA9H5XzP7J7V6MeYaBScfJ33FkAyNxni"
+        }
+      ],
+      "authentication": [
+        "did:example:extras#key-1"
+      ],
+      "assertionMethod": [
+        "did:example:extras#key-1"
+      ],
+      "controller": null,
+      "didDocumentMetadata": null
+    },
+    "goVerified": true
+  },
+  {
+    "name": "secp256k1_ok",
+    "credential": {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        {
+          "@vocab": "https://example.org/vocab#"
+        },
+        "https://w3id.org/security/suites/secp256k1-2019/v1"
+      ],
+      "credentialSubject": {
+        "f": 1.5,
+        "id": "did:example:subject",
+        "n": 1000000
+      },
+      "id": "urn:uuid:fixture-1",
+      "issuer": "did:example:secp",
+      "proof": {
+        "challenge": "ch-1",
+        "created": "2026-11-06T08:12:23Z",
+        "domain": "d.example",
+        "jws": "eyJhbGciOiJFUzI1NksiLCJiNjQiOmZhbHNlLCJjcml0IjpbImI2NCJdfQ..UH3nR0S9W23VAZspEe_kiJ_5CWRyR-_AzG8xn-C-JZ4PH2rJ6DSJFZnuND6v-jIIDb10N904IfO1YTT6KPJrCg",
+        "proofPurpose": "assertionMethod",
+        "type": "EcdsaSecp256k1Signature2019",
+        "verificationMethod": "did:example:secp#key-1"
+      },
+      "type": [
+        "VerifiableCredential"
+      ],
+      "validFrom": "2026-01-01T00:00:00Z"
+    },
+    "didDocument": {
+      "@context": null,
+      "id": "did:example:secp",
+      "verificationMethod": [
+        {
+          "id": "did:example:secp#key-1",
+          "type": "EcdsaSecp256k1VerificationKey2019",
+          "controller": "did:example:secp",
+          "publicKeyHex": "04b35b116329ad5ce292030a63deac8a75428d0029325500aac957bfdb632737464442c01f55fcdac94f902f2092249e899cf995a9ac764cac045de45c3f403db8"
+        }
+      ],
+      "authentication": [
+        "did:example:secp#key-1"
+      ],
+      "assertionMethod": [
+        "did:example:secp#key-1"
+      ],
+      "controller": null,
+      "didDocumentMetadata": null
+    },
+    "goVerified": true
+  },
+  {
+    "name": "secp256k1_sig65",
+    "credential": {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        {
+          "@vocab": "https://example.org/vocab#"
+        },
+        "https://w3id.org/security/suites/secp256k1-2019/v1"
+      ],
+      "credentialSubject": {
+        "f": 1.5,
+        "id": "did:example:subject",
+        "n": 1000000
+      },
+      "id": "urn:uuid:fixture-1",
+      "issuer": "did:example:secp",
+      "proof": {
+        "challenge": "ch-1",
+        "created": "2026-11-06T08:12:23Z",
+        "domain": "d.example",
+        "jws": "eyJhbGciOiJFUzI1NksiLCJiNjQiOmZhbHNlLCJjcml0IjpbImI2NCJdfQ..UH3nR0S9W23VAZspEe_kiJ_5CWRyR-_AzG8xn-C-JZ4PH2rJ6DSJFZnuND6v-jIIDb10N904IfO1YTT6KPJrCgA",
+        "proofPurpose": "assertionMethod",
+        "type": "EcdsaSecp256k1Signature2019",
+        "verificationMethod": "did:example:secp#key-1"
+      },
+      "type": [
+        "VerifiableCredential"
+      ],
+      "validFrom": "2026-01-01T00:00:00Z"
+    },
+    "didDocument": {
+      "@context": null,
+      "id": "did:example:secp",
+      "verificationMethod": [
+        {
+          "id": "did:example:secp#key-1",
+          "type": "EcdsaSecp256k1VerificationKey2019",
+          "controller": "did:example:secp",
+          "publicKeyHex": "04b35b116329ad5ce292030a63deac8a75428d0029325500aac957bfdb632737464442c01f55fcdac94f902f2092249e899cf995a9ac764cac045de45c3f403db8"
+        }
+      ],
+      "authentication": [
+        "did:example:secp#key-1"
+      ],
+      "assertionMethod": [
+        "did:example:secp#key-1"
+      ],
+      "controller": null,
+      "didDocumentMetadata": null
+    },
+    "goVerified": false,
+    "goError": "proof 0 (did:example:secp#key-1): EcdsaSecp256k1Signature2019: jws signature is 65 bytes, want 64 (r||s)"
+  },
+  {
+    "name": "secp256k1_alias_type",
+    "credential": {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        {
+          "@vocab": "https://example.org/vocab#"
+        },
+        "https://w3id.org/security/suites/secp256k1-2019/v1"
+      ],
+      "credentialSubject": {
+        "f": 1.5,
+        "id": "did:example:subject",
+        "n": 1000000
+      },
+      "id": "urn:uuid:fixture-1",
+      "issuer": "did:example:secp",
+      "proof": {
+        "challenge": "ch-1",
+        "created": "2026-11-06T08:12:23Z",
+        "domain": "d.example",
+        "jws": "eyJhbGciOiJFUzI1NksiLCJiNjQiOmZhbHNlLCJjcml0IjpbImI2NCJdfQ..UH3nR0S9W23VAZspEe_kiJ_5CWRyR-_AzG8xn-C-JZ4PH2rJ6DSJFZnuND6v-jIIDb10N904IfO1YTT6KPJrCg",
+        "proofPurpose": "assertionMethod",
+        "type": "EcdsaSecp256k1VerificationKey2019",
+        "verificationMethod": "did:example:secp#key-1"
+      },
+      "type": [
+        "VerifiableCredential"
+      ],
+      "validFrom": "2026-01-01T00:00:00Z"
+    },
+    "didDocument": {
+      "@context": null,
+      "id": "did:example:secp",
+      "verificationMethod": [
+        {
+          "id": "did:example:secp#key-1",
+          "type": "EcdsaSecp256k1VerificationKey2019",
+          "controller": "did:example:secp",
+          "publicKeyHex": "04b35b116329ad5ce292030a63deac8a75428d0029325500aac957bfdb632737464442c01f55fcdac94f902f2092249e899cf995a9ac764cac045de45c3f403db8"
+        }
+      ],
+      "authentication": [
+        "did:example:secp#key-1"
+      ],
+      "assertionMethod": [
+        "did:example:secp#key-1"
+      ],
+      "controller": null,
+      "didDocumentMetadata": null
+    },
+    "goVerified": false,
+    "goError": "proof 0 (did:example:secp#key-1): unsupported proof type: EcdsaSecp256k1VerificationKey2019"
+  },
+  {
+    "name": "rdfc_signed_by_secp256k1",
+    "credential": {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        {
+          "@vocab": "https://example.org/vocab#"
+        }
+      ],
+      "credentialSubject": {
+        "id": "did:example:subject",
+        "n": 1
+      },
+      "id": "urn:uuid:fixture-1",
+      "issuer": "did:example:rdfc-k1",
+      "proof": {
+        "created": "2026-01-02T00:00:00Z",
+        "cryptosuite": "ecdsa-rdfc-2019",
+        "proofPurpose": "assertionMethod",
+        "proofValue": "z3cprniicoB1HsbaQCVhiNTF4muFTwUqYtuKGHcoa5S3oFXjcFssNj1tm8PExEibFTsr7oFQtQkYwYLaSYYsQWhLp",
+        "type": "DataIntegrityProof",
+        "verificationMethod": "did:example:rdfc-k1#key-1"
+      },
+      "type": [
+        "VerifiableCredential"
+      ],
+      "validFrom": "2026-01-01T00:00:00Z"
+    },
+    "didDocument": {
+      "@context": null,
+      "id": "did:example:rdfc-k1",
+      "verificationMethod": [
+        {
+          "id": "did:example:rdfc-k1#key-1",
+          "type": "EcdsaSecp256k1VerificationKey2019",
+          "controller": "did:example:rdfc-k1",
+          "publicKeyHex": "04b35b116329ad5ce292030a63deac8a75428d0029325500aac957bfdb632737464442c01f55fcdac94f902f2092249e899cf995a9ac764cac045de45c3f403db8"
+        }
+      ],
+      "authentication": [
+        "did:example:rdfc-k1#key-1"
+      ],
+      "assertionMethod": [
+        "did:example:rdfc-k1#key-1"
+      ],
+      "controller": null,
+      "didDocumentMetadata": null
+    },
+    "goVerified": false,
+    "goError": "proof 0 (did:example:rdfc-k1#key-1): ecdsa-rdfc-2019: verification method \"did:example:rdfc-k1#key-1\" uses curve \"\", but this SDK supports P-256 only"
+  },
+  {
+    "name": "legacy_der_hex",
+    "credential": {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        {
+          "@vocab": "https://example.org/vocab#"
+        }
+      ],
+      "credentialSubject": {
+        "id": "did:example:subject",
+        "n": 1
+      },
+      "id": "urn:uuid:fixture-1",
+      "issuer": "did:example:legacy-der",
+      "proof": {
+        "created": "2026-01-02T00:00:00Z",
+        "cryptosuite": "ecdsa-rdfc-2019",
+        "proofPurpose": "assertionMethod",
+        "proofValue": "304402204ab8c22ddeee5f0c1f4f2c7550d9b614610f8a0d036667c44202fd817301232102202dbad25a9dbc41fe547e6e41c3aa0899eda98bb28e815e34e71ac1e08a26c7af",
+        "type": "DataIntegrityProof",
+        "verificationMethod": "did:example:legacy-der#key-1"
+      },
+      "type": [
+        "VerifiableCredential"
+      ],
+      "validFrom": "2026-01-01T00:00:00Z"
+    },
+    "didDocument": {
+      "@context": null,
+      "id": "did:example:legacy-der",
+      "verificationMethod": [
+        {
+          "id": "did:example:legacy-der#key-1",
+          "type": "EcdsaSecp256k1VerificationKey2019",
+          "controller": "did:example:legacy-der",
+          "publicKeyHex": "04b35b116329ad5ce292030a63deac8a75428d0029325500aac957bfdb632737464442c01f55fcdac94f902f2092249e899cf995a9ac764cac045de45c3f403db8"
+        }
+      ],
+      "authentication": [
+        "did:example:legacy-der#key-1"
+      ],
+      "assertionMethod": [
+        "did:example:legacy-der#key-1"
+      ],
+      "controller": null,
+      "didDocumentMetadata": null
+    },
+    "goVerified": false,
+    "goError": "proof 0 (did:example:legacy-der#key-1): invalid signature length: got 70, want 64 or 65 bytes"
+  },
+  {
+    "name": "legacy_hex_64",
+    "credential": {
+      "@context": [
+        "https://www.w3.org/ns/credentials/v2",
+        {
+          "@vocab": "https://example.org/vocab#"
+        }
+      ],
+      "credentialSubject": {
+        "id": "did:example:subject",
+        "n": 1
+      },
+      "id": "urn:uuid:fixture-1",
+      "issuer": "did:example:legacy-der",
+      "proof": {
+        "created": "2026-01-02T00:00:00Z",
+        "cryptosuite": "ecdsa-rdfc-2019",
+        "proofPurpose": "assertionMethod",
+        "proofValue": "4ab8c22ddeee5f0c1f4f2c7550d9b614610f8a0d036667c44202fd81730123212dbad25a9dbc41fe547e6e41c3aa0899eda98bb28e815e34e71ac1e08a26c7af",
+        "type": "DataIntegrityProof",
+        "verificationMethod": "did:example:legacy-der#key-1"
+      },
+      "type": [
+        "VerifiableCredential"
+      ],
+      "validFrom": "2026-01-01T00:00:00Z"
+    },
+    "didDocument": {
+      "@context": null,
+      "id": "did:example:legacy-der",
+      "verificationMethod": [
+        {
+          "id": "did:example:legacy-der#key-1",
+          "type": "EcdsaSecp256k1VerificationKey2019",
+          "controller": "did:example:legacy-der",
+          "publicKeyHex": "04b35b116329ad5ce292030a63deac8a75428d0029325500aac957bfdb632737464442c01f55fcdac94f902f2092249e899cf995a9ac764cac045de45c3f403db8"
+        }
+      ],
+      "authentication": [
+        "did:example:legacy-der#key-1"
+      ],
+      "assertionMethod": [
+        "did:example:legacy-der#key-1"
+      ],
+      "controller": null,
+      "didDocumentMetadata": null
+    },
+    "goVerified": true
+  }
+]

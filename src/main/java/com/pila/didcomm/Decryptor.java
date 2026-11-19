@@ -34,13 +34,18 @@ public final class Decryptor {
                 byte[] plaintext = cipher.doFinal(ciphertextWithTag);
                 return new String(plaintext);
             } catch (Exception e) {
-                // Fallback to mock tag verification (legacy compatibility)
-                // Decrypt without appending the tag - tag was just mock data
+                // Fallback to mock tag for backward compatibility (Go uses sharedKey[:16]).
+                byte[] mockTag = new byte[16];
+                System.arraycopy(sharedKey, 0, mockTag, 0, Math.min(16, sharedKey.length));
+                byte[] ciphertextWithMockTag = new byte[ciphertext.length + mockTag.length];
+                System.arraycopy(ciphertext, 0, ciphertextWithMockTag, 0, ciphertext.length);
+                System.arraycopy(mockTag, 0, ciphertextWithMockTag, ciphertext.length, mockTag.length);
+
                 Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
                 SecretKeySpec keySpec = new SecretKeySpec(sharedKey, "AES");
                 GCMParameterSpec gcmSpec = new GCMParameterSpec(128, iv);
                 cipher.init(Cipher.DECRYPT_MODE, keySpec, gcmSpec);
-                byte[] plaintext = cipher.doFinal(ciphertext);
+                byte[] plaintext = cipher.doFinal(ciphertextWithMockTag);
                 return new String(plaintext);
             }
         } catch (Exception e) {

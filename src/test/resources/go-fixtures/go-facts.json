@@ -1,0 +1,67 @@
+{
+ "bad": {
+  "emptyContextDoc": "lib=canonicalization produced no N-Quads; the document has no @context or no JSON-LD terms legacy=\u003cnil\u003e",
+  "noContext": "lib=failed to canonicalize document: expand: invalid property: Dropping property that did not expand into an absolute IRI or keyword. legacy=\u003cnil\u003e",
+  "relativeId": "lib=failed to canonicalize document: json-ld: id \"rel/1\" is not an absolute IRI and would be dropped, leaving the node unsigned legacy=\u003cnil\u003e",
+  "relativeType": "lib=\u003cnil\u003e legacy=\u003cnil\u003e",
+  "undefinedTerm": "lib=failed to canonicalize document: expand: invalid property: Dropping property that did not expand into an absolute IRI or keyword. legacy=\u003cnil\u003e"
+ },
+ "doc": {
+  "@context": {
+   "@vocab": "https://ex.org/#"
+  },
+  "id": "urn:uuid:1",
+  "a": [
+   1000000,
+   1700000000,
+   0.00001,
+   1.0,
+   1e2,
+   1e21,
+   123456789012345678,
+   0.1,
+   1.5,
+   100000,
+   999999,
+   12345678.9,
+   -1e-7,
+   3.14159,
+   true,
+   "s"
+  ]
+ },
+ "legacy": "_:c14n0 \u003chttps://ex.org/#a\u003e \"-1e-07\" .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"0.1\" .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"1\" .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"1.2345678901234568e+17\" .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"1.23456789e+07\" .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"1.5\" .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"1.7e+09\" .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"100\" .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"100000\" .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"1e+06\" .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"1e+21\" .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"1e-05\" .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"3.14159\" .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"999999\" .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"s\" .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"true\"^^\u003chttp://www.w3.org/2001/XMLSchema#boolean\u003e .\n_:c14n0 \u003chttps://ex.org/#id\u003e \"urn:uuid:1\" .\n",
+ "library": "_:c14n0 \u003chttps://ex.org/#a\u003e \"-1.0E-7\"^^\u003chttp://www.w3.org/2001/XMLSchema#double\u003e .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"1\"^^\u003chttp://www.w3.org/2001/XMLSchema#integer\u003e .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"1.0E-1\"^^\u003chttp://www.w3.org/2001/XMLSchema#double\u003e .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"1.0E-5\"^^\u003chttp://www.w3.org/2001/XMLSchema#double\u003e .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"1.0E21\"^^\u003chttp://www.w3.org/2001/XMLSchema#double\u003e .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"1.23456789E7\"^^\u003chttp://www.w3.org/2001/XMLSchema#double\u003e .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"1.5E0\"^^\u003chttp://www.w3.org/2001/XMLSchema#double\u003e .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"100\"^^\u003chttp://www.w3.org/2001/XMLSchema#integer\u003e .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"100000\"^^\u003chttp://www.w3.org/2001/XMLSchema#integer\u003e .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"1000000\"^^\u003chttp://www.w3.org/2001/XMLSchema#integer\u003e .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"123456789012345680\"^^\u003chttp://www.w3.org/2001/XMLSchema#integer\u003e .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"1700000000\"^^\u003chttp://www.w3.org/2001/XMLSchema#integer\u003e .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"3.14159E0\"^^\u003chttp://www.w3.org/2001/XMLSchema#double\u003e .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"999999\"^^\u003chttp://www.w3.org/2001/XMLSchema#integer\u003e .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"s\" .\n_:c14n0 \u003chttps://ex.org/#a\u003e \"true\"^^\u003chttp://www.w3.org/2001/XMLSchema#boolean\u003e .\n_:c14n0 \u003chttps://ex.org/#id\u003e \"urn:uuid:1\" .\n",
+ "libraryErr": "\u003cnil\u003e",
+ "relativeIri": {
+  "": true,
+  "#frag": true,
+  "%zz:x": true,
+  "/abs/path": true,
+  "1abc:x": true,
+  "@json": false,
+  "@type": false,
+  "_:b0": false,
+  "a b:c": true,
+  "a:b": false,
+  "did:example:1#k": false,
+  "foo": true,
+  "http://a b": true,
+  "http://ex.org/%zz": true,
+  "mailto:a@b": false,
+  "rel/1": true,
+  "urn:x": false
+ },
+ "rfc3339": {
+  "": false,
+  "2026-01-02 03:04:05Z": false,
+  "2026-01-02T03:04:05": false,
+  "2026-01-02T03:04:05+07:00": true,
+  "2026-01-02T03:04:05.123456789Z": true,
+  "2026-01-02T03:04:05Z": true,
+  "2026-01-02T03:04:05z": false,
+  "2026-01-02T23:59:60Z": false,
+  "2026-01-02t03:04:05Z": false,
+  "2026-13-02T03:04:05Z": false
+ }
+}
